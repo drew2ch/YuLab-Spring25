@@ -2,11 +2,13 @@
 
 Andrew Chung, hc893, 4/14/2025
 
-The Basic Local Alignment Search Tool (BLAST) finds regions of local similarity between protein or nucleotide sequences. The program compares nucleotide or protein sequences to sequence in a database and calculates the statistical significance of the matches. Below, my summary exemplifies a runthrough of `blastp` (Protein BLAST).
+The Basic Local Alignment Search Tool (BLAST) finds regions of local similarity between protein or nucleotide sequences. The program compares nucleotide or protein sequences to sequence in a database and calculates the statistical significance of the matches. Below is a comprehensive run-through of the `blastp` (Protein BLAST) workflow.
+
+Information acquired from [NCBI website](https://www.ncbi.nlm.nih.gov/books/NBK1734/) and ChatGPT.
 
 ## Query Sequence Pre-processing
 
-Query sequences must be loaded into **FASTA format**, and pre-processing steps such as masking of low-complexity regions (e.g. repeats, such as `AAAAAA` or `TATATA`) may be performed. Example FASTA format below:
+Query sequences must be loaded into **FASTA format**, and pre-processing steps such as masking of low-complexity regions (e.g. repetitive sequences) may be performed. Example FASTA format below:
 
 ```fasta
 >SequenceName Description
@@ -21,12 +23,14 @@ Specifically for local (custom-sequence) databases, use `makeblastdb` command to
 makeblastdb -in query.fasta -dbtype prot -out mydb
 ```
 
+`prot` for Blastp, and `nucl` for Blastn.
+
 ## Running a BLAST search
 
 ### Command Line
 
 ```bash
-blastn -query query.fasta -db mydb -out results.txt -outfmt 5
+blastp -query query.fasta -db mydb -out results.txt -outfmt 5
 ```
 
 ### Remote Search with Python
