@@ -80,7 +80,7 @@ where each $s(q_i,d_i)$ measures the substitution score for aligning query amino
 
 The **E-value** quantifies the statistical significance of a particular alignment:
 
-$$E=Kmn\operatorname{exp}(-\lambda S)$$
+$$E=Kmn\cdot\mathrm{exp}(-\lambda S)$$
 
 where
 
