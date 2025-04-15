@@ -70,7 +70,7 @@ For identified seeds, the alignment is **extended** in either direction, using s
 
 ### Alignment Score Computation
 
-For an alignment with lengtb $L$, the cumulative **alignment score** is computed using the following formula:
+For an alignment with length $L$, the cumulative **alignment score** is computed using the following formula:
 
 $$S = \sum_{i=1}^{L}s(q_i,d_i)-G$$
 
