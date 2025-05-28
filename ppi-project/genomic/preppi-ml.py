@@ -1,6 +1,9 @@
 # PPI Prediction Comparison with PrePPI (GO terms) Genomic ML Features
 # Andrew Chung, hc893; 5/20/2025
 
+import warnings
+warnings.filterwarnings("ignore")
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,30 +32,36 @@ def compute_metrics(y_test, y_prob):
     'roc_auc': roc_auc, 'pr_auc': pr_auc
   }
 
-def train_rf(X_train, y_train, X_test, y_test, class_weight = 1):
+def train_rf(X_train, y_train, X_test, y_test): #, class_weight = 1):
   rf = RandomForestClassifier(
     n_estimators = 500, 
-    random_state = 893,
-    class_weight = {0: class_weight, 1: 1}
+    random_state = 893#,
+    #class_weight = {0: class_weight, 1: 1}
   )
   rf.fit(X_train, y_train)
   y_prob = rf.predict_proba(X_test)[:, 1]
   return compute_metrics(y_test, y_prob)
 
 def train_svc(X_train, y_train, X_test, y_test):
-  svc = SVC(probability = True, random_state = 893)
+  svc = SVC(
+    probability = True, 
+    random_state = 893
+  )
   svc.fit(StandardScaler().fit_transform(X_train), y_train)
   y_prob = svc.predict_proba(X_test)[:, 1]
   return compute_metrics(y_test, y_prob)
 
 def train_xgb(X_train, y_train, X_test, y_test):
-  xgb = XGBClassifier(n_estimators = 500, random_state = 893)
+  xgb = XGBClassifier(
+    n_estimators = 500, 
+    random_state = 893
+  )
   xgb.fit(X_train, y_train)
   y_prob = xgb.predict_proba(X_test)[:, 1]
   return compute_metrics(y_test, y_prob)
 
 def train_knn(X_train, y_train, X_test, y_test, cv = False):
-  if cv:
+  if not cv:
     knn = KNeighborsClassifier(n_neighbors = 5) # gridcv ?
     knn.fit(
       StandardScaler().fit_transform(X_train), y_train
@@ -81,6 +90,22 @@ def train_nb(X_train, y_train, X_test, y_test):
   y_prob = nb.predict_proba(X_test)[:, 1]
   return compute_metrics(y_test, y_prob)
 
+def plot_roc_pr(metrics, axes, col, n_pos, n_neg, data_type = None, classifier = None):
+  # plot ROC curve
+  axes[0, col].plot(metrics['fpr'], metrics['tpr'], label = f'{data_type} - {classifier} ({metrics['roc_auc']:.2f})')
+  axes[0, col].set_title(f'Interacting ({n_pos}) vs Non-interacting ({n_neg})', fontsize = 12)
+  axes[0, col].set_xlabel('False Positive Rate', fontsize = 10)
+  axes[0, col].set_ylabel('True Positive Rate', fontsize = 10)
+  axes[0, col].legend(loc = 'lower right', fontsize = 8)
+
+  # plot PR curve
+  axes[1, col].plot(metrics['recall'], metrics['precision'], label = f'{data_type} - {classifier} ({metrics['pr_auc']:.2f})')
+  axes[1, col].set_title(f'Interacting ({n_pos}) vs Non-interacting ({n_neg})', fontsize = 12)
+  axes[1, col].set_xlabel('Recall', fontsize = 10)
+  axes[1, col].set_ylabel('Precision', fontsize = 10)
+  axes[1, col].legend(loc = 'lower right', fontsize = 8)
+
+
 def main():
 
   print("Loading and processing data...")
@@ -97,23 +122,22 @@ def main():
 
   # merge data sets, preserve only PPI pairs common to both data sets.
   data = pd.merge(af3_data, preppi_data, on = 'ppi', how = 'inner').query('label > -1')[[
-    'ppi', 'co-expression', 'BP', 'CC', 'MF', 'GO', 'EP', 'Total', 'label'
+    'ppi', 'co-expression', 'BP', 'CC', 'MF', 'SM', 'PrP', 'max(SM,PrP)', 
+    'PR', 'OR', 'PP', 'GO', 'EP', 'Total', 'label'
   ]].replace('NULL', 0).fillna(0.0) # ignore label = -1
-  data[['GO', 'EP']] = data[['GO', 'EP']].astype(float)
+  data[['SM', 'PrP', 'max(SM,PrP)', 'PR', 'OR', 'PP','GO', 'EP']] = data[['SM', 'PrP', 'max(SM,PrP)', 'PR', 'OR', 'PP','GO', 'EP']].astype(float)
 
   print("Training classifiers...")
 
   # define figure, axes
   fig, axes = plt.subplots(2, 4, figsize = (20, 10), constrained_layout = True)
-  #axes = axes.flatten()
 
   # Train Models, plot ROC/PR curves
   # ratios: 1:1, 1:10, 1:100, 1:1000
-  # For now, I will only train the Random Forest classifier
-  ratios = np.array([1, 1/10, 1/100, 1/1000])
+  ratios = np.array([1/1000, 1/100, 1/10, 1])
   for i, ratio in enumerate(ratios):
 
-    print(f"Training on ratio {ratio}...")
+    print(f"Training on ratio 1:{ratio*1000:.0f}...\n-----------------------------------")
 
     positives = data[data['label'] == 1]
     negatives = data[data['label'] == 0]
@@ -121,19 +145,28 @@ def main():
     n_pos = 100
     n_neg = int(n_pos * (1000*ratio))
 
-    # sample positives and negatives
-    sample_weight = n_neg / len(negatives)
-    pos_sample = positives.sample(n = n_pos, random_state = 893)
-    neg_sample = negatives.sample(
+    # below -- only if applying sample weights
+    '''by_weight = False
+
+    if by_weight: # apply sample weights
+      sample_weight = n_neg / len(negatives)
+      pos_sample = positives.sample(n = n_pos, replace = False, random_state = 893)
+      neg_sample = negatives.sample(
         n = n_neg,
         replace = False,
         random_state = 893
-    ) if sample_weight <= 1 else negatives
-
+      ) if sample_weight <= 1 else negatives
+    else: # resample with replacement'''
+    
+    pos_sample = positives.sample(n = n_pos, replace = False, random_state = 893)
+    neg_sample = negatives.sample(n = n_neg, replace = True, random_state = 893)
     data_sample = pd.concat([pos_sample, neg_sample])
 
     # train test split
-    X = data_sample[['co-expression', 'BP', 'CC', 'MF', 'GO', 'EP', 'Total']]
+    X = data_sample[[
+      'co-expression', 'BP', 'CC', 'MF', 'SM', 'PrP', 'max(SM,PrP)', 
+      'PR', 'OR', 'PP', 'GO', 'EP', 'Total'
+    ]]
     y = data_sample['label']
     X_train, X_test, y_train, y_test = train_test_split(
       X, y, test_size = 0.2, stratify = y, random_state = 893
@@ -142,47 +175,42 @@ def main():
     # partition data sets into 3 groups
     # 1. Co-expression, BP, CC, MF
     # 2. GO, EP; 3. Total
-    train1, train2, train3 = X_train[['co-expression', 'BP', 'CC', 'MF']], X_train[['GO', 'EP']], X_train[['Total']]
-    test1, test2, test3 = X_test[['co-expression', 'BP', 'CC', 'MF']], X_test[['GO', 'EP']], X_test[['Total']]
+    preppi_labels = np.array(['SM', 'PrP', 'max(SM,PrP)', 'PR', 'OR', 'PP', 'GO', 'EP', 'Total'])
+    train1, train2, train3 = X_train[['co-expression', 'BP', 'CC', 'MF']], X_train[['GO', 'EP']], X_train[preppi_labels]
+    test1, test2, test3 = X_test[['co-expression', 'BP', 'CC', 'MF']], X_test[['GO', 'EP']], X_test[preppi_labels]
     train_test_pairs = {
-      'AF3': [train1, test1],
+      'Trad ML': [train1, test1],
       'GO/EP': [train2, test2],
-      'Overall': [train3, test3]
+      'PrePPI': [train3, test3]
     }
     axes[0, i].plot([0, 1], [0, 1], linestyle = '--', color = 'gray', label = 'Random Guess')
 
     for mod, sets in train_test_pairs.items():
+      ''' # SVC takes too long, as well as subpar ROC/PR performance
+      # train SVC Classifier
+      metrics_svc = train_svc(sets[0], y_train, sets[1], y_test)
+      '''
+      # train Random Forest Classifier
+      print(f"Random Forest: {mod}")
+      metrics_rf = train_rf(sets[0], y_train, sets[1], y_test)
+      # train XGBoost Classifier
+      print(f"XGBoost: {mod}")
+      metrics_xgb = train_xgb(sets[0], y_train, sets[1], y_test)
+      # train Naive Bayes Classifier
+      print(f"Naive Bayes: {mod}")
+      metrics_nb = train_nb(sets[0], y_train, sets[1], y_test)
 
-      print(f"Training {mod} model...")
+      # Plot ROC/PR
+      plot_roc_pr(metrics_rf, axes, i, n_pos, n_neg, data_type = mod, classifier = 'Random Forest')
+      plot_roc_pr(metrics_xgb, axes, i, n_pos, n_neg, data_type = mod, classifier = 'XGBoost')
+      plot_roc_pr(metrics_nb, axes, i, n_pos, n_neg, data_type = mod, classifier = 'Naive Bayes')
 
-      # obtain ROC/PR metrics
-      metrics = train_rf(
-        sets[0], 
-        y_train, 
-        sets[1], 
-        y_test,
-        # apply sample weight only if desired n_neg > len(negatives), else weight 1 (no weighting)
-        class_weight = np.max(np.array([1, sample_weight]))
-      )
-
-      # plot ROC curve
-      axes[0, i].plot(metrics['fpr'], metrics['tpr'], label = f'{mod} (AUC = {metrics['roc_auc']:.2f})')
-      axes[0, i].set_title(f'Interacting ({n_pos}) vs Non-interacting ({n_neg})', fontsize = 12)
-      axes[0, i].set_xlabel('False Positive Rate', fontsize = 10)
-      axes[0, i].set_ylabel('True Positive Rate', fontsize = 10)
-      axes[0, i].legend(loc = 'lower right', fontsize = 8)
-
-      # plot PR curve
-      axes[1, i].plot(metrics['recall'], metrics['precision'], label = f'{mod} (AUC = {metrics['pr_auc']:.2f})')
-      axes[1, i].set_title(f'Interacting ({n_pos}) vs Non-interacting ({n_neg})', fontsize = 12)
-      axes[1, i].set_xlabel('Recall', fontsize = 10)
-      axes[1, i].set_ylabel('Precision', fontsize = 10)
-      axes[1, i].legend(loc = 'lower right', fontsize = 8)
+    print("-----------------------------------")
 
   print("Training classifiers complete. Saving plots...")
-  plt.savefig('preppi_ml_may22.png', bbox_inches = 'tight')
+  plt.savefig('preppi_ml_may27.png', bbox_inches = 'tight')
   plt.close()
-  print("Plots saved. Done.")
+  print("Plots saved.")
 
 if __name__ == "__main__":
   main()
