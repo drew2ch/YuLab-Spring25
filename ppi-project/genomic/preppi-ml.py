@@ -7,7 +7,6 @@ warnings.filterwarnings("ignore")
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.utils import resample
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
@@ -16,8 +15,7 @@ from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import (
-  accuracy_score, precision_score, recall_score, f1_score, roc_auc_score,
-  roc_curve, precision_recall_curve, auc
+  roc_auc_score, roc_curve, precision_recall_curve, auc
 )
 from xgboost import XGBClassifier
 
