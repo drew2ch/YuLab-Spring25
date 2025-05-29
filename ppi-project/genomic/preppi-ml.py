@@ -125,12 +125,13 @@ def main():
   ]].replace('NULL', 0).fillna(0.0) # ignore label = -1
 
   preppi_labels = np.array(['SM', 'PrP', 'max(SM,PrP)', 'PR', 'OR', 'PP', 'GO', 'EP', 'Total'])
-  data = data[~np.isinf(data[preppi_labels]).any(axis=1)]
+  data = data[~np.isinf(data[preppi_labels]).any(axis = 1)]
 
   print("Training classifiers...")
 
   # define figure, axes
   fig, axes = plt.subplots(2, 4, figsize = (20, 10), constrained_layout = True)
+  fig.suptitle("Traditional ML Classifiers vs. PrePPI", fontsize = 16, fontweight = 'bold')
 
   # Train Models, plot ROC/PR curves
   # ratios: 1:1, 1:10, 1:100, 1:1000
@@ -205,7 +206,7 @@ def main():
     print("-----------------------------------")
 
   print("Training classifiers complete. Saving plots...")
-  plt.savefig('preppi_ml_may27.png', bbox_inches = 'tight')
+  plt.savefig('preppi_ml_may29.png', bbox_inches = 'tight')
   plt.close()
   print("Plots saved.")
 
