@@ -125,7 +125,9 @@ def main():
     'ppi', 'co-expression', 'BP', 'CC', 'MF', 'SM', 'PrP', 'max(SM,PrP)', 
     'PR', 'OR', 'PP', 'GO', 'EP', 'Total', 'label'
   ]].replace('NULL', 0).fillna(0.0) # ignore label = -1
-  data[['SM', 'PrP', 'max(SM,PrP)', 'PR', 'OR', 'PP','GO', 'EP']] = data[['SM', 'PrP', 'max(SM,PrP)', 'PR', 'OR', 'PP','GO', 'EP']].astype(float)
+
+  preppi_labels = np.array(['SM', 'PrP', 'max(SM,PrP)', 'PR', 'OR', 'PP', 'GO', 'EP', 'Total'])
+  data = data[~np.isinf(data[preppi_labels]).any(axis=1)]
 
   print("Training classifiers...")
 
@@ -142,12 +144,11 @@ def main():
     positives = data[data['label'] == 1]
     negatives = data[data['label'] == 0]
 
-    n_pos = 100
+    n_pos = len(positives)
     n_neg = int(n_pos * (1000*ratio))
 
     # below -- only if applying sample weights
     '''by_weight = False
-
     if by_weight: # apply sample weights
       sample_weight = n_neg / len(negatives)
       pos_sample = positives.sample(n = n_pos, replace = False, random_state = 893)
@@ -156,11 +157,10 @@ def main():
         replace = False,
         random_state = 893
       ) if sample_weight <= 1 else negatives
-    else: # resample with replacement'''
+    '''
     
-    pos_sample = positives.sample(n = n_pos, replace = False, random_state = 893)
     neg_sample = negatives.sample(n = n_neg, replace = True, random_state = 893)
-    data_sample = pd.concat([pos_sample, neg_sample])
+    data_sample = pd.concat([positives, neg_sample])
 
     # train test split
     X = data_sample[[
@@ -175,7 +175,6 @@ def main():
     # partition data sets into 3 groups
     # 1. Co-expression, BP, CC, MF
     # 2. GO, EP; 3. Total
-    preppi_labels = np.array(['SM', 'PrP', 'max(SM,PrP)', 'PR', 'OR', 'PP', 'GO', 'EP', 'Total'])
     train1, train2, train3 = X_train[['co-expression', 'BP', 'CC', 'MF']], X_train[['GO', 'EP']], X_train[preppi_labels]
     test1, test2, test3 = X_test[['co-expression', 'BP', 'CC', 'MF']], X_test[['GO', 'EP']], X_test[preppi_labels]
     train_test_pairs = {
