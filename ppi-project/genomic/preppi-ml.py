@@ -187,8 +187,8 @@ def main():
       print(f"Training on {mod}")
       metrics_rf = train_rf(sets[0], y_train, sets[1], y_test, class_weight = class_weight)
       # XGBoost Classifier
-      #print(f"Training on {mod}")
-      #metrics_xgb = train_xgb(sets[0], y_train, sets[1], y_test, class_weight = class_weight)
+      print(f"Training on {mod}")
+      metrics_xgb = train_xgb(sets[0], y_train, sets[1], y_test, class_weight = class_weight)
 
       '''
       # train Naive Bayes Classifier
@@ -198,13 +198,13 @@ def main():
 
       # Plot ROC/PR
       plot_roc_pr(metrics_rf, axes, i, n_pos, n_neg, data_type = mod)
-      # plot_roc_pr(metrics_xgb, axes, i, n_pos, n_neg, data_type = mod)
+      plot_roc_pr(metrics_xgb, axes, i, n_pos, n_neg, data_type = mod)
       # plot_roc_pr(metrics_nb, axes, i, n_pos, n_neg, data_type = mod, classifier = 'Naive Bayes')
 
     print("-----------------------------------")
 
   print("Training classifiers complete. Saving plots...")
-  plt.savefig('preppi_rf.png', bbox_inches = 'tight')
+  plt.savefig('preppi_ml.png', bbox_inches = 'tight')
   plt.close()
   print("Plots saved.")
 
