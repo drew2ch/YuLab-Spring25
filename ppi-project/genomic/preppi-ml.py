@@ -135,7 +135,7 @@ def main():
 
   # define figure, axes
   fig, axes = plt.subplots(2, 4, figsize = (20, 10), constrained_layout = True)
-  fig.suptitle("Traditional ML Classifiers vs. PrePPI (Random Forest)", fontsize = 16, fontweight = 'bold')
+  fig.suptitle("Traditional ML Classifiers vs. PrePPI", fontsize = 16, fontweight = 'bold')
   sns.set_theme(style = 'darkgrid')
 
   # Train Models, plot ROC/PR curves
