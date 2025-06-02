@@ -94,18 +94,18 @@ def train_nb(X_train, y_train, X_test, y_test):
 
 def plot_roc_pr(metrics, axes, col, n_pos, n_neg, data_type = None):
   # plot ROC curve
-  sns.lineplot(x = metrics['fpr'], y = metrics['tpr'], ax = axes[0, col], label = f'{data_type} ({metrics["roc_auc"]:.2f})')
-  axes[0, col].set_title(f'Interacting ({n_pos}) vs Non-interacting ({n_neg})', fontsize = 12)
+  sns.lineplot(x = metrics['fpr'], y = metrics['tpr'], ax = axes[0, col], label = f'{data_type} ({metrics["roc_auc"]:.2f})', linewidth = 2)
+  axes[0, col].set_title(f'Interacting ({n_pos}) vs Non-interacting ({n_neg})', fontsize = 13)
   axes[0, col].set_xlabel('False Positive Rate', fontsize = 10)
   axes[0, col].set_ylabel('True Positive Rate', fontsize = 10)
-  axes[0, col].legend(loc = 'lower right', fontsize = 8)
+  axes[0, col].legend(loc = 'lower right', facecolor='white', fontsize = 11, frameon = True, fancybox = True)
 
   # plot PR curve
-  sns.lineplot(x = metrics['recall'], y = metrics['precision'], ax = axes[1, col], label = f'{data_type} ({metrics["pr_auc"]:.2f})')
-  axes[1, col].set_title(f'Interacting ({n_pos}) vs Non-interacting ({n_neg})', fontsize = 12)
+  sns.lineplot(x = metrics['recall'], y = metrics['precision'], ax = axes[1, col], label = f'{data_type} ({metrics["pr_auc"]:.2f})', linewidth = 2)
+  axes[1, col].set_title(f'Interacting ({n_pos}) vs Non-interacting ({n_neg})', fontsize = 13)
   axes[1, col].set_xlabel('Recall', fontsize = 10)
   axes[1, col].set_ylabel('Precision', fontsize = 10)
-  axes[1, col].legend(loc = 'lower right', fontsize = 8)
+  axes[1, col].legend(loc = 'lower left', facecolor='white', fontsize = 11, frameon = True, fancybox = True)
 
 
 def main():
@@ -179,7 +179,7 @@ def main():
       'PrePPI (GO, EP)': [train2, test2],
       'PrePPI': [train3, test3]
     }
-    axes[0, i].plot([0, 1], [0, 1], linestyle = '--', color = 'gray', label = 'Random Guess')
+    axes[0, i].plot([0, 1], [0, 1], linestyle = '--', color = 'gray')
 
     for mod, sets in train_test_pairs.items():
       
