@@ -134,10 +134,10 @@ def main():
   print("Training classifiers...")
 
   # define figure, axes
-  fig, axes = plt.subplots(2, 4, figsize = (20, 10), constrained_layout = True)
-  fig.suptitle("Traditional ML Classifiers vs. PrePPI", fontsize = 16, fontweight = 'bold')
   sns.set_theme(style = 'darkgrid')
-
+  fig, axes = plt.subplots(2, 4, figsize = (20, 10), constrained_layout = True)
+  #fig.suptitle("Traditional ML Classifiers vs. PrePPI", fontsize = 16, fontweight = 'bold')
+  
   # Train Models, plot ROC/PR curves
   # ratios: 1:1, 1:10, 1:100, 1:1000
   ratios = np.power(10, np.arange(4))
@@ -175,20 +175,20 @@ def main():
     train1, train2, train3 = X_train[['co-expression', 'BP', 'CC', 'MF']], X_train[['GO', 'EP']], X_train[preppi_labels]
     test1, test2, test3 = X_test[['co-expression', 'BP', 'CC', 'MF']], X_test[['GO', 'EP']], X_test[preppi_labels]
     train_test_pairs = {
-      'Co-exp, BP, MF, CC': [train1, test1],
+      'Random Forest': [train1, test1],
       'PrePPI (GO, EP)': [train2, test2],
-      'PrePPI (overall)': [train3, test3]
+      'PrePPI': [train3, test3]
     }
     axes[0, i].plot([0, 1], [0, 1], linestyle = '--', color = 'gray', label = 'Random Guess')
 
     for mod, sets in train_test_pairs.items():
       
-      # Random Forest Classifier
+      # Random Forest Classifier (will use for ML subgroup, 6/2)
       print(f"Training on {mod}")
       metrics_rf = train_rf(sets[0], y_train, sets[1], y_test, class_weight = class_weight)
       # XGBoost Classifier
-      print(f"Training on {mod}")
-      metrics_xgb = train_xgb(sets[0], y_train, sets[1], y_test, class_weight = class_weight)
+      # print(f"Training on {mod}")
+      # metrics_xgb = train_xgb(sets[0], y_train, sets[1], y_test, class_weight = class_weight)
 
       '''
       # train Naive Bayes Classifier
@@ -198,7 +198,7 @@ def main():
 
       # Plot ROC/PR
       plot_roc_pr(metrics_rf, axes, i, n_pos, n_neg, data_type = mod)
-      plot_roc_pr(metrics_xgb, axes, i, n_pos, n_neg, data_type = mod)
+      # plot_roc_pr(metrics_xgb, axes, i, n_pos, n_neg, data_type = mod)
       # plot_roc_pr(metrics_nb, axes, i, n_pos, n_neg, data_type = mod, classifier = 'Naive Bayes')
 
     print("-----------------------------------")
