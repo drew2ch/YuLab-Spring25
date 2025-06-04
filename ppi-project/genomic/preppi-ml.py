@@ -8,16 +8,18 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split#, GridSearchCV
+#from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.naive_bayes import GaussianNB
+#from sklearn.svm import SVC
+#from sklearn.neighbors import KNeighborsClassifier
+#from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import (
   roc_auc_score, roc_curve, precision_recall_curve, auc
 )
 from xgboost import XGBClassifier
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.over_sampling import RandomOverSampler
 
 def compute_metrics(y_test, y_prob):
   fpr, tpr, _ = roc_curve(y_test, y_prob)
@@ -148,30 +150,36 @@ def main():
     positives = data[data['label'] == 1]
     negatives = data[data['label'] == 0]
 
-    n_pos = len(positives)
-    n_neg = int(n_pos * ratio)
-
-    if ratio == 1: # no class weighting
-      neg_sample = negatives.sample(n = n_neg, replace = False, random_state = 893)
-      class_weight = 1
-    else: # need class weighting
-      neg_sample = negatives
-      class_weight = n_neg/len(negatives)
-    data_sample = pd.concat([positives, neg_sample])
-
     # train test split
-    X = data_sample[[
+    X = data[[
       'co-expression', 'BP', 'CC', 'MF', 'SM', 'PrP', 'max(SM,PrP)', 
       'PR', 'OR', 'PP', 'GO', 'EP', 'Total'
     ]]
-    y = data_sample['label']
+    y = data['label']
     X_train, X_test, y_train, y_test = train_test_split(
       X, y, test_size = 0.2, stratify = y, random_state = 893
     )
 
+    n_pos = sum(y_train == 1)
+    n_neg = sum(y_train == 0)
+    n_pos_target = n_pos
+    n_neg_target = n_pos * ratio
+    print(f"Interacting: {n_pos_target}, Non-Interacting: {n_neg_target}")
+
+    if n_neg_target < n_neg: # need to remove some negative samples
+      rus = RandomUnderSampler(
+        sampling_strategy = {0: n_neg_target, 1: n_pos_target}, random_state = 893
+      )
+      X_train, y_train = rus.fit_resample(X_train, y_train)
+    else: # need to oversample with replacement
+      ros = RandomOverSampler(
+        sampling_strategy = {0: n_neg_target, 1: n_pos_target}, random_state = 893
+      )
+      X_train, y_train = ros.fit_resample(X_train, y_train)
+
     # partition data sets into 3 groups
     # 1. Co-expression, BP, CC, MF
-    # 2. GO, EP; 3. Total
+    # 2. GO, EP; 3. PrePPI (overall)
     train1, train2, train3 = X_train[['co-expression', 'BP', 'CC', 'MF']], X_train[['GO', 'EP']], X_train[preppi_labels]
     test1, test2, test3 = X_test[['co-expression', 'BP', 'CC', 'MF']], X_test[['GO', 'EP']], X_test[preppi_labels]
     train_test_pairs = {
@@ -182,24 +190,14 @@ def main():
     axes[0, i].plot([0, 1], [0, 1], linestyle = '--', color = 'gray')
 
     for mod, sets in train_test_pairs.items():
-      
-      # Random Forest Classifier (will use for ML subgroup, 6/2)
       print(f"Training on {mod}")
-      metrics_rf = train_rf(sets[0], y_train, sets[1], y_test, class_weight = class_weight)
-      # XGBoost Classifier
-      # print(f"Training on {mod}")
-      # metrics_xgb = train_xgb(sets[0], y_train, sets[1], y_test, class_weight = class_weight)
-
-      '''
-      # train Naive Bayes Classifier
-      print(f"Naive Bayes: {mod}")
-      metrics_nb = train_nb(sets[0], y_train, sets[1], y_test)
-      '''
-
-      # Plot ROC/PR
-      plot_roc_pr(metrics_rf, axes, i, n_pos, n_neg, data_type = mod)
-      # plot_roc_pr(metrics_xgb, axes, i, n_pos, n_neg, data_type = mod)
-      # plot_roc_pr(metrics_nb, axes, i, n_pos, n_neg, data_type = mod, classifier = 'Naive Bayes')
+      classifier_name = 'rf' # 'rf', 'xgb'; change as needed
+      if classifier_name == 'rf':
+        metrics = train_rf(sets[0], y_train, sets[1], y_test)
+        plot_roc_pr(metrics, axes, i, n_pos_target, n_neg_target, data_type = mod)
+      elif classifier_name == 'xgb':
+        metrics = train_xgb(sets[0], y_train, sets[1], y_test)
+        plot_roc_pr(metrics, axes, i, n_pos_target, n_neg_target, data_type = mod)
 
     print("-----------------------------------")
 
