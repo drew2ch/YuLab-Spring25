@@ -1,0 +1,9 @@
+# Make R, RMD files detectable by linguist
+*.R linguist-detectable
+*.r linguist-detectable
+
+*.Rmd linguist-detectable
+*.rmd linguist-detectable
+
+# since .ipynb notebooks take up a lot of abscess space
+*.ipynb linguist-detectable = false
