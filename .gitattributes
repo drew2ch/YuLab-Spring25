@@ -6,4 +6,4 @@
 *.rmd linguist-detectable
 
 # since .ipynb notebooks take up a lot of abscess space
-*.ipynb linguist-detectable = false
+*.ipynb linguist-detectable=false
