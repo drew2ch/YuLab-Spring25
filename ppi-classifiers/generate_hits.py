@@ -23,7 +23,7 @@ logging.basicConfig(
 # may not need this, if running shell script locally
 # DEFAULT_USER_BASE_DIR = "/home/jc3668/projects" 
 DEFAULT_USER_BASE_DIR = "C:/Users/hychu/OneDrive/Desktop/Summer 2025"
-REPOSITORY_DIR="github/pioneer3/bf-classifiers"
+REPOSITORY_DIR="github/ppi-classifiers"
 
 # DEFAULT_FOLDSEEK_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "foldseek")
 DEFAULT_PDB_DB_FOLDSEEK = os.path.join(DEFAULT_USER_BASE_DIR, "pdb")
@@ -127,8 +127,8 @@ def run_foldseek_for_single_protein(
 
     # 3. Convert alignments
     convertalis_format = "query,target,pident,fident,alnlen,mismatch,gapopen,qstart,qend,qlen,tstart,tend,tlen,evalue,bits,qaln,taln,qseq,tseq"
-    convertalis_cmd_parts = [
-        foldseek_executable_path, "convertalis", tmp_db_path, target_pdb_db_path,
+    convertalis_cmd_parts = docker_elements + [
+        "convertalis", tmp_db_path, target_pdb_db_path,
         tmp_result_path, tsv_output_path,
         "--format-output", convertalis_format
     ]
@@ -177,7 +177,7 @@ def main():
     parser.add_argument('--fasta_input_dir', default=DEFAULT_FASTA_INPUT_DIR, help=f"Directory of saved query FASTA files. Default: {DEFAULT_FASTA_INPUT_DIR}")
     parser.add_argument('--tsv_output_dir', default=DEFAULT_TSV_OUTPUT_DIR, help=f"Directory to save Foldseek TSV results. Default: {DEFAULT_TSV_OUTPUT_DIR}")
     parser.add_argument('--foldseek_internal_tmp_dir', default=DEFAULT_FOLDSEEK_INTERNAL_TMP_DIR, help=f"Base temporary directory for Foldseek's own intermediate files. Default: {DEFAULT_FOLDSEEK_INTERNAL_TMP_DIR}")
-    parser.add_argument('--foldseek_path', default=DEFAULT_FOLDSEEK_PATH, help=f"Path to Foldseek executable. Default: {DEFAULT_FOLDSEEK_PATH}")
+    # parser.add_argument('--foldseek_path', default=DEFAULT_FOLDSEEK_PATH, help=f"Path to Foldseek executable. Default: {DEFAULT_FOLDSEEK_PATH}")
     parser.add_argument('--pdb_db_foldseek', default=DEFAULT_PDB_DB_FOLDSEEK, help=f"Path to Foldseek target PDB database. Default: {DEFAULT_PDB_DB_FOLDSEEK}")
     parser.add_argument('--prostt5_weights', default=DEFAULT_PROSTT5_WEIGHTS, help=f"Path to ProstT5 model weights. Default: '{DEFAULT_PROSTT5_WEIGHTS}'")
     parser.add_argument('--force_rerun', action='store_true') 
@@ -247,7 +247,7 @@ def main():
         run_foldseek_for_single_protein(
             protein_id=protein_id,
             sequence=sequence,
-            foldseek_executable_path=args.foldseek_path,
+            # foldseek_executable_path=args.foldseek_path,
             target_pdb_db_path=args.pdb_db_foldseek,
             prostt5_model_path=args.prostt5_weights,
             fasta_input_path=expected_fasta_path,
