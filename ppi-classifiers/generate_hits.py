@@ -4,11 +4,12 @@ import subprocess
 import argparse
 import logging
 import tempfile
+import pathlib
 import shutil
 import tqdm
 
 # 6/11/25 code by Juheon, to generate hits from individual protein query sequences.
-# annotations and pertinent workflow modifications made by Andrew.
+#   annotations and pertinent workflow modifications made by Andrew.
 
 # Configure logging
 logging.basicConfig(
@@ -19,29 +20,26 @@ logging.basicConfig(
     ]
 )
 
-# --- Default Constants (can be overridden by command-line arguments) ---
-# may not need this, if running shell script locally
-# DEFAULT_USER_BASE_DIR = "/home/jc3668/projects" 
-DEFAULT_USER_BASE_DIR = "C:/Users/hychu/OneDrive/Desktop/Summer 2025"
+DEFAULT_USER_BASE_DIR = "C:/Users/hychu/OneDrive/Desktop/Summer25"
 REPOSITORY_DIR="github/ppi-classifiers"
 
-# DEFAULT_FOLDSEEK_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "foldseek")
-DEFAULT_PDB_DB_FOLDSEEK = os.path.join(DEFAULT_USER_BASE_DIR, "pdb")
-DEFAULT_PROSTT5_WEIGHTS = os.path.join(DEFAULT_USER_BASE_DIR, "prostt5_out")
+# --- Default Constants (can be overridden by command-line arguments) ---
+DEFAULT_PDB_DB_FOLDSEEK = os.path.join(DEFAULT_USER_BASE_DIR, "databases/pdb_")
+DEFAULT_PROSTT5_WEIGHTS = os.path.join(DEFAULT_USER_BASE_DIR, "databases/weights")
+DEFAULT_FASTA_INPUT_DIR = os.path.join(DEFAULT_USER_BASE_DIR, "output/fasta")
+DEFAULT_TSV_OUTPUT_DIR = os.path.join(DEFAULT_USER_BASE_DIR, "output/tsv")
+DEFAULT_FOLDSEEK_INTERNAL_TMP_DIR = os.path.join(DEFAULT_USER_BASE_DIR, "transient/foldseek_internal_temp")
 
-"""DEFAULT_FASTA_FILE_INPUT = "/home/jc3668/projects/foldseek_search_test/data/uniprot_seqs_both_sets.txt"
-DEFAULT_UNIPROT_FILE_INPUT = f"{DEFAULT_USER_BASE_DIR}/{REPOSITORY_DIR}/monomers.txt"
-"""
-DEFAULT_FASTA_INPUT_DIR = "/home/jc3668/projects/foldseek_search_test/scratch/fasta"
-DEFAULT_TSV_OUTPUT_DIR = "/home/jc3668/projects/foldseek_search_test/scratch/tsv"
-DEFAULT_FOLDSEEK_INTERNAL_TMP_DIR = os.path.join(DEFAULT_USER_BASE_DIR, REPOSITORY_DIR, 'transient', 'foldseek_internal_tmp')
+# determine host-to-container mount for Dockerized path
+HOST_CWD = pathlib.Path().absolute()
+CONTAINER_MOUNT_POINT = "/data"
+CONTAINER_MOUNT = f"{HOST_CWD}:{CONTAINER_MOUNT_POINT}"
 
-# data sets
-"""
-DEFAULT_TRAIN_SET_FILE = "/home/jc3668/projects/foldseek_search_test/data/train/train_set.txt"
-DEFAULT_TEST_SET_FILE = "/home/jc3668/projects/foldseek_search_test/data/test/test_set.txt"
-DEFAULT_VALIDATION_SET_FILE = "/home/jc3668/projects/foldseek_search_test/data/validation/validation_set.txt"
-"""
+# helper function to map a host path to its container equivalent
+def to_container_path(host_path):
+    p = str(host_path).replace('\\', '/')
+    host_prefix = str(HOST_CWD).replace('\\', '/')
+    return p.replace(host_prefix, CONTAINER_MOUNT_POINT)
 
 def load_fasta_sequences(fasta_file_path):
     """Load protein sequences from the FASTA-like files #(ID sequence per line)."""
@@ -51,7 +49,7 @@ def load_fasta_sequences(fasta_file_path):
     for filename in tqdm.tqdm(os.listdir(fasta_file_path)):
         if filename.endswith('.fasta'):
             monomer_id = os.path.splitext(filename)[0]
-            filepath = os.path.join(fasta_file_path, filename)
+            filepath = os.path.normpath(os.path.join(fasta_file_path, filename))
             with open(filepath, "r") as infile:
                 infile.readline() # skip header
                 sequence = infile.readline().rstrip('\n')
@@ -61,7 +59,7 @@ def load_fasta_sequences(fasta_file_path):
 
 def run_foldseek_for_single_protein(
     protein_id,
-    sequence,
+    # sequence, (redundant param)
     # foldseek_executable_path,
     target_pdb_db_path,
     prostt5_model_path,
@@ -74,20 +72,16 @@ def run_foldseek_for_single_protein(
     Saves query FASTA and detailed TSV output. Uses assert for validation.
     """
 
-    # create output path
-    #os.makedirs(os.path.dirname(fasta_output_path), exist_ok=True)
-    #os.makedirs(os.path.dirname(tsv_output_path), exist_ok=True)
-
-    # temp directory
-    os.makedirs(foldseek_internal_tmp_dir, exist_ok=True)
-
     # since I already imported and saved query FASTA files in /fasta,
     # that particular step may not be necessary here.
-    """
-    with open(fasta_output_path, "w") as f:
-        f.write(f">{protein_id}\n{sequence}\n")
-    logging.info(f"Query FASTA for {protein_id} saved to {fasta_output_path}")
-    """
+    #os.makedirs(os.path.dirname(fasta_output_path), exist_ok=True)
+    #with open(fasta_output_path, "w") as f:
+    #    f.write(f">{protein_id}\n{sequence}\n")
+    #logging.info(f"Query FASTA for {protein_id} saved to {fasta_output_path}")
+
+    # create output path
+    os.makedirs(tsv_output_path, exist_ok=True)
+    os.makedirs(foldseek_internal_tmp_dir, exist_ok=True)
 
     current_run_tmp_dir = tempfile.mkdtemp(dir=foldseek_internal_tmp_dir, prefix=f"fs_tmp_{protein_id}_")
     tmp_db_path = os.path.join(current_run_tmp_dir, f"{protein_id}_querydb")
@@ -95,7 +89,10 @@ def run_foldseek_for_single_protein(
 
     # 1. Create query database
     # Note: I'm running Foldseek as a Docker image.
-    docker_elements = ["docker", "run", "--rm", "-v", "${PWD}:/data", "foldseek-binary"]
+    current_cwd = pathlib.Path().absolute()
+    root = current_cwd.parent.parent
+    container_mount = f"{root}:/data"
+    docker_elements = ["docker", "run", "--rm", "-v", container_mount, "foldseek-binary"]
     createdb_cmd_parts = docker_elements + [
         "createdb", 
         fasta_input_path, 
@@ -164,8 +161,26 @@ def get_unique_ids_from_files(file_paths_list):
     return unique_ids
 """
 
+def windows_to_docker_path(windows_path, root):
+    """Convert Windows absolute path to Docker container path"""
+    abs_path = os.path.abspath(windows_path)
+    # Make relative to Summer25 root (not current working directory)
+    rel_path = os.path.relpath(abs_path, root)
+    # Replace backslashes with forward slashes for Docker
+    docker_path = "/data/" + rel_path.replace("\\", "/")
+    return docker_path
+
 def main():
     parser = argparse.ArgumentParser(description="Run Foldseek for unique individual proteins from specified dataset files.")
+
+    # convert paths for docker coneainer
+    root = pathlib.Path().absolute().parent.parent
+    DOCKER_FASTA_INPUT_DIR = windows_to_docker_path(DEFAULT_FASTA_INPUT_DIR, root)
+    DOCKER_TSV_OUTPUT_DIR = windows_to_docker_path(DEFAULT_TSV_OUTPUT_DIR, root)
+    DOCKER_FOLDSEEK_INTERNAL_TMP_DIR = windows_to_docker_path(DEFAULT_FOLDSEEK_INTERNAL_TMP_DIR, root)
+    DOCKER_PDB_DB_FOLDSEEK = windows_to_docker_path(DEFAULT_PDB_DB_FOLDSEEK, root)
+    DOCKER_PROSTT5_WEIGHTS = windows_to_docker_path(DEFAULT_PROSTT5_WEIGHTS, root)
+
     """Slight modification to workflow: since I have already identified unique protein IDs from the data, I will prioritize 
     generating hits (homologs) on the already identified unique monomers first and perform train-test splitting later."""
 
@@ -174,12 +189,12 @@ def main():
     # parser.add_argument('--validation_set_file', default=DEFAULT_VALIDATION_SET_FILE, help=f"Path to the validation set file. Default: {DEFAULT_VALIDATION_SET_FILE}")
     # parser.add_argument('--uniprot_id_file', default=DEFAULT_UNIPROT_FILE_INPUT, help=f"Path to the main UniProt ID file. Default: {DEFAULT_UNIPROT_FILE_INPUT}")
     # parser.add_argument('--fasta_file', default=DEFAULT_FASTA_FILE_INPUT, help=f"Path to the main FASTA file. Default: {DEFAULT_FASTA_FILE_INPUT}")
-    parser.add_argument('--fasta_input_dir', default=DEFAULT_FASTA_INPUT_DIR, help=f"Directory of saved query FASTA files. Default: {DEFAULT_FASTA_INPUT_DIR}")
-    parser.add_argument('--tsv_output_dir', default=DEFAULT_TSV_OUTPUT_DIR, help=f"Directory to save Foldseek TSV results. Default: {DEFAULT_TSV_OUTPUT_DIR}")
-    parser.add_argument('--foldseek_internal_tmp_dir', default=DEFAULT_FOLDSEEK_INTERNAL_TMP_DIR, help=f"Base temporary directory for Foldseek's own intermediate files. Default: {DEFAULT_FOLDSEEK_INTERNAL_TMP_DIR}")
+    parser.add_argument('--fasta_input_dir', default=DOCKER_FASTA_INPUT_DIR, help=f"Directory of saved query FASTA files. Default: {DOCKER_FASTA_INPUT_DIR}")
+    parser.add_argument('--tsv_output_dir', default=DOCKER_TSV_OUTPUT_DIR, help=f"Directory to save Foldseek TSV results. Default: {DOCKER_TSV_OUTPUT_DIR}")
+    parser.add_argument('--foldseek_internal_tmp_dir', default=DOCKER_FOLDSEEK_INTERNAL_TMP_DIR, help=f"Base temporary directory for Foldseek's own intermediate files. Default: {DOCKER_FOLDSEEK_INTERNAL_TMP_DIR}")
     # parser.add_argument('--foldseek_path', default=DEFAULT_FOLDSEEK_PATH, help=f"Path to Foldseek executable. Default: {DEFAULT_FOLDSEEK_PATH}")
-    parser.add_argument('--pdb_db_foldseek', default=DEFAULT_PDB_DB_FOLDSEEK, help=f"Path to Foldseek target PDB database. Default: {DEFAULT_PDB_DB_FOLDSEEK}")
-    parser.add_argument('--prostt5_weights', default=DEFAULT_PROSTT5_WEIGHTS, help=f"Path to ProstT5 model weights. Default: '{DEFAULT_PROSTT5_WEIGHTS}'")
+    parser.add_argument('--pdb_db_foldseek', default=DOCKER_PDB_DB_FOLDSEEK, help=f"Path to Foldseek target PDB database. Default: {DOCKER_PDB_DB_FOLDSEEK}")
+    parser.add_argument('--prostt5_weights', default=DOCKER_PROSTT5_WEIGHTS, help=f"Path to ProstT5 model weights. Default: '{DOCKER_PROSTT5_WEIGHTS}'")
     parser.add_argument('--force_rerun', action='store_true') 
     parser.add_argument('--total_batches', type=int, default=1, help="Total number of batches the protein list is divided into.")
     parser.add_argument('--current_batch_index', type=int, default=0, help="Index of the current batch to process (0-indexed).")
@@ -230,8 +245,8 @@ def main():
         processed_in_this_batch +=1
         logging.info(f"--- Processing protein {processed_in_this_batch}/{len(proteins_to_process_this_batch)}: {protein_id} ---")
 
-        expected_fasta_path = os.path.join(args.fasta_input_dir, f"{protein_id}.fasta")
-        expected_tsv_path = os.path.join(args.tsv_output_dir, f"{protein_id}.tsv")
+        expected_fasta_path = os.path.normpath(os.path.join(args.fasta_input_dir, f"{protein_id}.fasta"))
+        expected_tsv_path = os.path.normpath(os.path.join(args.tsv_output_dir, f"{protein_id}.tsv"))
 
         if not args.force_rerun and \
            os.path.exists(expected_fasta_path) and \

@@ -3,8 +3,6 @@ set -euo pipefail
 
 # Bash script to compile unique individual proteins in PrePPI-Genomic combined PPI
 #   pairs, as well as extracting the associated .fasta files for each protein monomer.
-# Then, it calls the generate_hits.py script that runs Foldseek and generates .tsv
-#   files for each UniProt ID, containing information on their identified homologs.
 # Andrew Chung, hc893, 6/13/2025
 
 # import features data file
@@ -27,7 +25,7 @@ uniprot_url="https://rest.uniprot.org/uniprotkb/"
 echo "Accessing .FASTA files from rest.uniprot.org..."
 for monomer in "${unique_monomers[@]}"; do
   if [[ -z "${monomer}" ]]; then continue; fi # check if length zero, skip if so
-  # echo "Processing ${monomer}..."
+  echo "Processing ${monomer}..."
   status=$(curl -s -L -w "%{http_code}" -o "../../output/fasta/${monomer}.fasta" "${uniprot_url}${monomer}.fasta")
   if [[ "${status}" -eq 200 ]]; then
     { # integrate multi-line sequences into a single line
@@ -47,7 +45,7 @@ done
 
 # first, 
 mkdir -p ../../output/tsv
-DEFAULT_USER_BASE_DIR="C:/Users/hychu/OneDrive/Desktop/Summer 2025/"
+DEFAULT_USER_BASE_DIR="C:/Users/hychu/OneDrive/Desktop/Summer25/"
 # REPOSITORY_DIR="github/ppi-classifiers"
 # define some paths
 FASTA_INPUT_PATH="${DEFAULT_USER_BASE_DIR}/output/fasta"
@@ -55,7 +53,7 @@ TSV_OUTPUT_PATH="${DEFAULT_USER_BASE_DIR}/output/tsv"
 FOLDSEEK_INTERNAL_TEMP_DIR="${DEFAULT_USER_BASE_DIR}/transient/foldseek_internal_temp"
 
 # run python script
-python3 generate_hits.py \
+python generate_hits.py \
   --fasta_input_dir "${FASTA_INPUT_PATH}" \
   --tsv_output_dir "${TSV_OUTPUT_PATH}" \
   --foldseek_internal_tmp_dir "${FOLDSEEK_INTERNAL_TEMP_DIR}" \
