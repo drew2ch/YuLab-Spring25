@@ -39,26 +39,3 @@ for monomer in "${unique_monomers[@]}"; do
     rm -f "fasta/${monomer}.fasta"
   fi
 done
-
-# now, run foldseek on each individual query protein, then store the search (hit)
-# results into .tsv files
-
-# first, 
-mkdir -p ../../output/tsv
-DEFAULT_USER_BASE_DIR="C:/Users/hychu/OneDrive/Desktop/Summer25/"
-# REPOSITORY_DIR="github/ppi-classifiers"
-# define some paths
-FASTA_INPUT_PATH="${DEFAULT_USER_BASE_DIR}/output/fasta"
-TSV_OUTPUT_PATH="${DEFAULT_USER_BASE_DIR}/output/tsv"
-FOLDSEEK_INTERNAL_TEMP_DIR="${DEFAULT_USER_BASE_DIR}/transient/foldseek_internal_temp"
-
-# run python script
-python generate_hits.py \
-  --fasta_input_dir "${FASTA_INPUT_PATH}" \
-  --tsv_output_dir "${TSV_OUTPUT_PATH}" \
-  --foldseek_internal_tmp_dir "${FOLDSEEK_INTERNAL_TEMP_DIR}" \
-  --pdb_db_foldseek "${DEFAULT_USER_BASE_DIR}/databases/pdb_" \
-  --prostt5_weights "${DEFAULT_USER_BASE_DIR}/databases/weights" \
-  --force_rerun --total_batches 1 --current_batch_index 0
-
-# docker run --rm -v ${PWD}:/data foldseek-binary
