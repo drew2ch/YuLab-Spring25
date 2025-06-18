@@ -126,7 +126,6 @@ def run_foldseek_for_single_protein(
     sp = subprocess.run(cmd_search, capture_output = True, text = True, check = False)
     assert sp.returncode == 0, \
         f"Foldseek search failed for {protein_id}.\nExit Code: {sp.returncode}\nStdout: {sp.stdout}\nStderr: {sp.stderr}"
-
     # If search returned 0, Foldseek expects the result file to exist for convertalis,
     # even if it's empty (no hits). We'll let convertalis handle an empty result if that's Foldseek's behavior.
     # An explicit check for tmp_result_path's existence might be redundant if convertalis itself fails clearly.
@@ -145,10 +144,13 @@ def run_foldseek_for_single_protein(
 
     logging.info(f"Foldseek TSV output for {protein_id} saved to {tsv_output_path}")
 
-    # Cleanup temporary directory
-    if os.path.exists(tmp_dir_docker):
-        shutil.rmtree(tmp_dir_docker)
-    logging.info(f"Finished {protein_id}: TSV saved to {tsv_output_path}")
+    # Cleanup temporary directory (not fatal)
+    if os.path.exists(host_tmp):
+        try:
+            shutil.rmtree(host_tmp)
+        except Exception as e:
+            logging.error(f"Unable to clean up temporary directory {host_tmp}: {e}")
+
     return True # Return True on success (all assertions passed)
 
 def main():
@@ -200,7 +202,7 @@ def main():
     os.makedirs(args.tsv_output_dir, exist_ok=True)
     os.makedirs(args.foldseek_internal_tmp_dir, exist_ok=True)
 
-    processed = 0; successful = 0; skipped = 0
+    processed = 0; successful = 0; skipped = 0; unsuccessful_ids = np.array([])
 
     # === Loop Processing of Foldseek Workflow for Single Proteins ===
     for protein_id in proteins_to_process_this_batch:
@@ -221,7 +223,6 @@ def main():
         assert sequence is not None, f"Sequence for protein ID {protein_id} not found in main FASTA file."
 
         # run_foldseek_for_single_protein will now assert on failure
-        logging.info(f"--- Running Foldseek for Protein {protein_id} ---")
         run_foldseek_for_single_protein(
             protein_id = protein_id,
             fasta_input_path = expected_fasta_path,
@@ -230,8 +231,11 @@ def main():
             prostt5_host = args.prostt5_weights,
             foldseek_internal_tmp_dir = args.foldseek_internal_tmp_dir
         )
-
-        successful += 1
+        if os.path.exists(expected_tsv_path):
+            successful += 1
+        else:
+            logging.error(f"Foldseek run unsuccessful for {protein_id}.")
+            unsuccessful_ids = np.append(unsuccessful_ids, [protein_id])
 
     # Use print for final summary of this batch job to distinguish it in logs
     print("--- Batch Processing Summary for this job ---")
@@ -239,9 +243,15 @@ def main():
     print(f"Proteins assigned to this batch: {len(proteins_to_process_this_batch)}")
     print(f"Successfully processed/found existing in this batch: {successful}")
     print(f"Skipped in this batch (outputs existed): {skipped}")
-    print(f"Query FASTA files for this batch saved in: {args.fasta_output_dir}")
+    print(f"Query FASTA files for this batch saved in: {args.fasta_input_dir}")
     print(f"TSV result files for this batch saved in: {args.tsv_output_dir}")
+    print(f"Unsuccessful Foldseek Runs: {len(unsuccessful_ids)}")
     print("Processing complete for this batch job.")
+
+    if len(unsuccessful_ids) > 0:
+        with open("unsuccessful_hits_2.txt", "w") as outfile:
+            for prot_id in unsuccessful_ids:
+                outfile.write(f"{prot_id}\n")
 
 if __name__ == "__main__":
     main()

@@ -6,16 +6,16 @@ set -euo pipefail
 # Andrew Chung, hc893, 6/13/2025
 
 # import features data file
-DATA="features.csv"
+DATA="training_features.csv"
 TXT="monomers.txt"
 
 # identify unique individual proteins from features file
-echo "Parsing features data file, iterating through PPI pairs..."
+echo "Parsing (training) features data file, iterating through PPI pairs..."
 unique_monomers=()
 mapfile -t unique_monomers < <(tail -n +2 "$DATA" | cut -d',' -f2 | tr ':' '\n' | sort | uniq)
 # first, save up the list of monomers into .txt
-printf "%s\n" "${unique_monomers[@]}" > monomers.txt
-echo "Unique proteins successfully identified and saved to 'monomers.txt'."
+printf "%s\n" "${unique_monomers[@]}" > training_monomers.txt
+echo "Unique proteins successfully identified and saved to 'training_monomers.txt'."
 echo "${#unique_monomers[@]} distinct monomers were found."
 
 # import .FASTA files for all monomers, derived from rest.uniprot.org
