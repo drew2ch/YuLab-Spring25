@@ -15,8 +15,8 @@ import pickle
 # define some global objects
 DEFAULT_USER_BASE_DIR = "C:/Users/hychu/OneDrive/Desktop/Summer25"
 DEFAULT_FOLDSEEK_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "homolog-results/foldseek")
-DEFAULT_INPUT_FILE = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/training_features.csv")
-DEFAULT_CACHE_FILE = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/homologs_tree.pkl")   
+DEFAULT_INPUT_FILE = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/features.csv")
+DEFAULT_CACHE_FILE = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/archive/homologs_tree.pkl")   
 NUM_PROTEINS = 12343 # based on total count of tsv output files
 
 # full convertalis format: "query, target, pident, fident, alnlen, mismatch, gapopen, qstart, qend, qlen, tstart, tend, tlen, evalue, bits, qaln, taln, qseq, tseq"
@@ -225,7 +225,7 @@ def main():
     parser = argparse.ArgumentParser(description = "Foldseek Result Parsing and Template Identification among Identified Homolog Pairs.")
     parser.add_argument("--foldseek_path", default = DEFAULT_FOLDSEEK_PATH, help = "Path for Foldseek result files (.tsv)")
     parser.add_argument("--input_file", default = DEFAULT_INPUT_FILE, help = "Input/Output data file name: .csv or .txt")
-    parser.add_argument("--output_file", default = None, help = "Output data file name: .csv")
+    parser.add_argument("--output_file", default = DEFAULT_INPUT_FILE, help = "Output data file name: .csv")
     parser.add_argument("--rank_by", default = "fident", help = "Foldseek output metric to rank template pairs")
     parser.add_argument("--top_n", default = 1, help = "Top n template pairs")
     parser.add_argument("--is_txt", action = "store_true", default = False, help = "Process as .txt file instead of .csv")
