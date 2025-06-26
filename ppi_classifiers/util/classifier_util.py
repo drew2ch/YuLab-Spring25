@@ -176,18 +176,18 @@ def create_ratioed_test_set_oversample_neg(X_orig_test, y_orig_test, target_neg_
           
     return X_test_ratioed, y_test_ratioed
 
-def plot_roc_pr_with_ratios(metrics: dict, axes, cind, plot_title_detail, data_type = None) -> None:
+def plot_roc_pr_with_ratios(results: dict, axes, cind, plot_title_detail, clf_type = None) -> None:
     """ Plot ROC/PR curves and refines figure aesthetics. 
-    --- metrics should be a dict object with the key:value pairs prescribed in compute_metrics above.
+    --- results should be a dict object with the key:value pairs prescribed in compute_metrics above.
     --- axes: the axes on which your plots are superimposed.
     --- cind: (for grid-arranged axes) column index
     --- plot_title_detail: customizable
-    --- data_type: nature of the data set (e.g. features used, data source)
+    --- clf_type: nature of the data set (e.g. features used, data source)
     """
     # plot ROC curve
     sns.lineplot(
-        x = metrics['fpr'], y = metrics['tpr'], ax = axes[0, cind], 
-        label = f'{data_type} ({metrics['roc_auc']:.3f})',
+        x = results['fpr'], y = results['tpr'], ax = axes[0, cind], 
+        label = f'{clf_type} ({results['roc_auc']:.3f})',
         linewidth = 1.5, ci = None
     )
     axes[0, cind].set_title(f"Test set: {plot_title_detail}", fontsize = 11)
@@ -198,8 +198,8 @@ def plot_roc_pr_with_ratios(metrics: dict, axes, cind, plot_title_detail, data_t
 
     # plot PR curve
     sns.lineplot(
-        x = metrics['recall'], y = metrics['precision'], ax = axes[1, cind],
-        label = f'{data_type} ({metrics['pr_auc']:.3f})',
+        x = results['recall'], y = results['precision'], ax = axes[1, cind],
+        label = f'{clf_type} ({results['pr_auc']:.3f})',
         linewidth = 1.5, ci = None
     )
     axes[1, cind].set_xlabel('Recall', fontsize = 9)

@@ -30,11 +30,11 @@ from sklearn.metrics import (
 sys.path.append(os.path.abspath(os.path.join(
     os.path.dirname(__file__), '..'))
 )
-from util.classifier_util import *
+from ...util.classifier_util import *
 
 DEFAULT_USER_BASE_DIR = "C:/Users/hychu/OneDrive/Desktop/Summer25/github/ppi-classifiers"
 DEFAULT_DATA_PATH = f"{DEFAULT_USER_BASE_DIR}/data/features.csv"
-DEFAULT_FIGURES_DIR = f"{DEFAULT_USER_BASE_DIR}/foldseek/foldseek_classifiers.png"
+DEFAULT_FIGURES_DIR = f"{DEFAULT_USER_BASE_DIR}/foldseek/"
 RANDOM_STATE = np.random.RandomState(893)
 
 # Configure logging
@@ -97,7 +97,7 @@ def compute_metrics(y_test, y_prob) -> dict:
         --- ap_score: Average Precision
     """
     if len(y_test) == 0:
-        print("Warning: y_test is empty, cannot compute metrics.")
+        logging.warning("Warning: y_test is empty, cannot compute metrics.")
         return {
             'fpr': np.array([0,1]), 'tpr': np.array([0,1]), 
             'precision': np.array([0,1]), 'recall': np.array([1,0]),
@@ -106,7 +106,7 @@ def compute_metrics(y_test, y_prob) -> dict:
     if len(np.unique(y_test)) < 2:
         num_actual_positives = np.sum(y_test == 1)
         baseline_pr = num_actual_positives / len(y_test) if len(y_test) > 0 else 0.0
-        print(f"Warning: y_test has only one class ({np.unique(y_test)[0]})")
+        logging.warning(f"Warning: y_test has only one class ({np.unique(y_test)[0]})")
         return {
             'fpr': np.array([0,1]), 'tpr': np.array([0,1]), 
             'precision': np.array([baseline_pr, baseline_pr]), 'recall': np.array([1,0]),
@@ -138,7 +138,11 @@ def train_rf(X_train, y_train, X_test, y_test, n_estimators: int = 500, random_s
     y_prob = rfc.predict_proba(X_test)[:, 1]
     return compute_metrics(y_test, y_prob), y_prob
 
-def plot_roc_pr(results: dict, axes, classifier_name: str, colors: np.array = None):
+def plot_roc_pr(
+        results: dict, 
+        axes, 
+        classifier_name: str
+    ):
     """ Plot ROC/PR curves for the given classifier results.
         NOTE: this function does not handle class ratios. 
         see classifier_util.plot_roc_pr_with_ratios() for that.
@@ -178,8 +182,8 @@ def main():
     parser.add_argument('--figures_dir', type = str, default = DEFAULT_FIGURES_DIR, help = "Output directory for result figures")
     args = parser.parse_args()
 
-    print("=== Foldseek Classifier Training ===")
-    print("Loading and processing data...")
+    logging.info("=== Foldseek Classifier Training ===")
+    logging.info("Loading and processing data...")
 
     # Load comprehensive PPI data set, retain only relevant columns
     try:
@@ -210,15 +214,6 @@ def main():
     print(f"Overall Baseline precision: {total_pos/(total_pos + total_neg):.4f}" if (total_pos + total_neg) > 0 else "N/A")
     input("Press Enter to continue...")
 
-    # perform train-test split; 80-20 Tr-Te ratio as default, stratify by label proportions.
-    X_train, X_test, y_train, y_test = train_test_split(
-        data.drop(columns = 'label'), data['label'],
-        test_size = 0.2, random_state = RANDOM_STATE, stratify = data['label']
-    )
-
-    """ define sets of features for each classifier, with the order above
-        For now, we have not decided whether to implemenet 'evalue' and 'bits' features.
-    """
     genomic_features = ['co-expression', 'BP', 'CC', 'MF']
     feature_sets = {
         'PrePPI -- total': ['Total'],
@@ -233,11 +228,20 @@ def main():
         # 'HT/fident/pident': ['has_templates', 'pident', 'fident']
     }
 
-    """ Train each classifier and collect metrics
-        Plotting region is defined as a 1x2 grid, exhibiting ROC/PR performances for each classifier.
+    """ Part 1: Full Raw Data File (P:N Ratio 1:4.5). Use all existing PPI pairs to train RFC.
+        80-20 Train-Test Split, stratified by label proportions.
     """
+    logging.info("=== Part 1: Training Classifiers on Full Data ===")
     fig, ax = plt.subplots(1, 2, figsize = (13, 6))
-    fig.suptitle(f"PrePPI (Total) vs. Random Forest Classifier with Genomic and Foldseek Features (P:N Ratio = 1:{(total_neg/total_pos):.1f})", fontsize = 16)
+    fig.suptitle(
+        f"PrePPI (Total) vs. Random Forest Classifier with Genomic and Foldseek Features (P:N Ratio = 1:{(total_neg/total_pos):.1f})", 
+        fontsize = 16
+    )
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        data.drop(columns = 'label'), data['label'],
+        test_size = 0.2, random_state = RANDOM_STATE, stratify = data['label']
+    )
 
     for clf_id, features in feature_sets.items():
 
@@ -245,11 +249,18 @@ def main():
             logging.error(f"Error: One or more features {features} not found in data columns.")
         logging.info(f"\n=== Training Classifier {clf_id} with features {features} ===")
         
+        """
         if clf_id == 'PrePPI (total)':
             RESULTS, y_prob = compute_metrics(y_test, X_test[features]), X_test[features].squeeze()
         else:
-            X_train_, X_test_ = X_train[features], X_test[features]
-            RESULTS, y_prob = train_rf(X_train_, y_train, X_test_, y_test)
+            RESULTS, y_prob = train_rf(X_train[features], y_train, X_test[features], y_test)
+        """
+
+        RESULTS, y_prob = compute_metrics(
+            y_test, X_test[features]
+        ), X_test[features].squeeze() if clf_id == 'PrePPI (total)' else train_rf(
+            X_train[features], y_train, X_test[features], y_test
+        )
 
         logging.info(f"Model training complete. Classifier {clf_id} results:")
         analyze_predictions(
@@ -261,19 +272,106 @@ def main():
         plot_roc_pr(
             results = RESULTS, axes = ax, classifier_name = clf_id
         )
-        print()
     
     # finalize figures, save to output directory
     print(f"\n{'='*60}")
     logging.info(f"All classifiers have been trained/evaluated. Saving figures to output directory {args.figures_dir}...")
     try:
-        plt.savefig('foldseek_classifiers.png', bbox_inches = 'tight', dpi = 300)
+        plt.savefig('foldseek_classifiers_fulldata.png', bbox_inches = 'tight', dpi = 300)
         plt.close()
-        logging.info("Plots saved as 'foldseek_classifiers.png'.")
+        logging.info("Plots saved as 'foldseek_classifiers_fulldata.png'.")
     except Exception as e:
         logging.error(f"Error saving plots: {e}")
         return
-    logging.info(f"Job Finished. \n{'='*60}")
+    
+    input("Press Enter to continue...")
+    print(f"\n{'='*60}\n")
+          
+    """ Part 2: Class Ratio-Based Resampling. Systematically oversample negative pairs to 
+        simulate real-world protein interactions.
+        Ratios (P:N): 1:1, 1:10, 1:100, 1:1000
+        In the same fashion as Part 1, 80-20 Train-Test Split, stratified by label proportions.
+    """
+    logging.info("=== Part 2: Training Classifiers with Class Ratios ===")
+    fig, ax = plt.subplots(2, 4, figsize = (20, 8))
+    fig.suptitle(
+        f"PrePPI (Total) vs. Random Forest Classifier with Genomic and Foldseek Features with Class Ratios", 
+        fontsize = 16
+    )
+    # First, train random forest classifiers on a balanced (constant) 1:1 training set
+    X_train_bal, y_train_bal = manual_resample_training_data(
+        X_train, y_train, 
+        n_pos_target = sum(y_train == 1), n_neg_target = sum(y_train == 1),
+        random_state = RANDOM_STATE
+    )
+    logging.info(f"Balanced training set size: P: {sum(y_train_bal == 1)}, N: {sum(y_train_bal == 0)}")
+    
+    # train each RFC on the balanced training set
+    # need to store trained RFC objects for test set evaluation
+    rfc_models = {clf_id: None for clf_id in feature_sets.keys() if clf_id != 'PrePPI -- total'}
+    for i, (clf_id, features) in enumerate(list(feature_sets.items())[1:]): # omit PrePPI (not RF)
+
+        logging.info(f"Training Classifier {clf_id} with balanced 1:1 train set...")
+        assert all(feature in X_train_bal.columns for feature in features), \
+            logging.error(f"Error: One or more features {features} not found in data columns.")
+
+        rfc = RandomForestClassifier(
+            n_estimators = 500, oob_score = True, random_state = RANDOM_STATE
+        )
+        rfc.fit(X_train_bal[features], y_train_bal)
+        rfc_models[clf_id] = rfc
+    logging.info("All classifiers trained on balanced 1:1 training set.")
+
+    """ Now, systematically create test sets with varying class ratios.
+        For each ratio, oversample the negative class to achieve the desired ratio.
+        Then, evaluate each classifier on the test set and plot ROC/PR curves.
+    """
+    ratios = np.power(10, np.arange(0, 4))  # 1:1, 1:10, 1:100, 1:1000
+    for i, ratio in enumerate(ratios):
+
+        print(f"\n{'='*60}\n=== Target Class Ratio 1:{ratio} ===")
+        # Test Set Resampling
+        X_test_ratio, y_test_ratio = create_ratioed_test_set_oversample_neg(
+            X_test, y_test, target_neg_multiplier = ratio, random_state = RANDOM_STATE + i # slight seed variations
+        )
+        n_p_test_ratio, n_n_test_ratio = sum(y_test_ratio == 1), sum(y_test_ratio == 0)
+        logging.info(f"Test set size: P: {n_p_test_ratio}, N: {n_n_test_ratio}")
+        logging.info(f"Overall Baseline Precision: {n_p_test_ratio/(n_p_test_ratio + n_n_test_ratio):.4f}")
+
+        for clf_id, features in feature_sets.items():
+
+            logging.info(f"\n=== Training Classifier {clf_id} with features {features} ===")
+            if clf_id == 'PrePPI (total)':
+                RESULTS, y_prob = compute_metrics(y_test_ratio, X_test_ratio[features]), X_test_ratio[features].squeeze()
+            else:
+                clf = rfc_models[clf_id]
+                y_prob = clf.predict_proba(X_test_ratio[features])[:, 1]
+                RESULTS = compute_metrics(y_test_ratio, y_prob)
+            
+            logging.info(f"Model training complete. Classifier {clf_id} results:")
+            analyze_predictions(
+                y_test_ratio, y_prob, model_name = clf_id, test_set_desc = ','.join(features)
+            )
+            logging.info("Plotting ROC/PR curves...")
+            plot_roc_pr_with_ratios(
+                results = RESULTS, axes = ax, cind = i, 
+                plot_title_detail = None,
+                clf_type = clf_id
+            )
+        
+        ax[0, i].set_title(f"Test Set: P:N ~ 1:{ratio}\n({n_p_test_ratio}P:{n_n_test_ratio}N)")
+
+    # finalize figures, save to output directory
+    print(f"\n{'='*60}")
+    logging.info(f"All classifiers have been trained/evaluated throughout all ratios. Saving figures to output directory {args.figures_dir}...")
+    try:
+        plt.savefig('foldseek_classifiers_ratio.png', bbox_inches = 'tight', dpi = 300)
+        plt.close()
+        logging.info("Plots saved as 'foldseek_classifiers_ratio.png'.")
+    except Exception as e:
+        logging.error(f"Error saving plots: {e}")
+        return
 
 if __name__ == "__main__":
     main()
+    logging.info(f"Job Finished. \n{'='*60}")
