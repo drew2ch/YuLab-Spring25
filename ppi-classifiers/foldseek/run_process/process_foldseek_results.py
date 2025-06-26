@@ -80,8 +80,11 @@ def templates_with_ident(
     - identical pdb_id (e.g. '8ink-assembly1.cif.gz_z' -> '8ink') pdb_id(A) == pdb_id(B)
     - non-identical chain id (e.g. '8ink-assembly1.cif.gz_z' -> 'z') chain_id(A) != chain_id(B)
     - Template pairs are ranked by the 'rank_by' argument (either 'pident' or 'fident'); by default, 'fident' is used.
-    - In the case of a tie between two 'fident' scores, the 'pident' is used as a tiebraker.
-    - The 'pident' and 'fident' scores for a template pair are taken as the average of individual respective scores. 
+        - 'fident', 'pident', and 'bits' of homolog pairs are averaged to represent respective values of the template pair.
+        - In the case of a tie between two 'fident' scores, the 'pident' is used as a tiebraker.
+        - The 'pident' and 'fident' scores for a template pair are taken as the average of individual respective scores. 
+        - e-values are tricky, since they aren't additive. Some ideas are (1) product or geometric/harmonic mean (2) Fisher's method (3) minimum
+        - here, I will go with the minimum (Tippett's) method
     - RETURNS: a np.2darray of the format (*[pdb-id, pident, fident])
     """
 
@@ -103,7 +106,7 @@ def templates_with_ident(
             if pdb_a == pdb_b and chain_a != chain_b:
                 template_pident = np.mean([pident_a, pident_b])
                 template_fident = np.mean([fident_a, fident_b])
-                template_evalue = np.mean([evalue_a, evalue_b])
+                template_evalue = np.min([evalue_a, evalue_b])
                 template_bits = np.mean([bits_a, bits_b])
                 template_pairs.append([
                     f"{pdb_a}-{chain_a}/{chain_b}", 
@@ -294,6 +297,14 @@ def main():
         print(f"Data saved to {args.output_file}.")
     except Exception as e:
         print(f"Error saving file: {e}")
+
+    # Delete pickle file to prevent Github Commit-Push obstruction
+    try:
+        os.remove(DEFAULT_CACHE_FILE)
+        print("Deleted cached file.")
+    except OSError as e:
+        print(f"Error deleting cached file: {e}")
+
 
     print("=== Job Finished. ===")
 

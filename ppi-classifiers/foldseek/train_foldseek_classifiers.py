@@ -1,11 +1,11 @@
 """ Training Random Forest Classifier Algorithm on PPI feature space with Foldseek-integrated features.
---- Classifier 1: Traditional (coexp, BP, CC, MF)
---- Classifier 2: coexp, BP, CC, MF + has_templates, fident
---- Classifier 3: coexp, BP, CC, MF + has_templates, pident
---- Classifier 4: coexp, BP, CC, MF + has_templates, fident, pident
---- Classifier 5: has_templates, pident
---- Classifier 6: has_templates, fident
---- Classifier 7: has_templates, pident, fident
+--- Classifier 0: PrePPI (Total score)
+--- Classifier 1: Genomic (coexp, BP, CC, MF)
+--- Classifier 2: Genomic + has_templates, fident
+--- Classifier 3: Genomic + has_templates, pident
+--- Classifier 4: Genomic + has_templates, fident, pident
+--- Classifier 5: Genomic + has_templates, fident, pident, e-value
+--- Classifier 6: Genomic + has_templates, fident, pident, bit-score
 === Andrew Chung, hc893; 6/16/2025 ===
 """
 
