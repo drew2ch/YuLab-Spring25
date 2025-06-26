@@ -1,0 +1,477 @@
+============================================================
+=== DATASETS OVERVIEW ===
+Selected features: Total, co-expression, BP, CC, MF, has_templates, fident, pident, evalue, bits
+Head of PPI Data File:
+                   Total  co-expression        BP  ...  evalue  bits  label
+ppi                                                ...                     
+P49901:Q8N831   5.578828       0.999960  0.100000  ...     0.0   0.0      0
+O95231:P05106   0.842794       0.215681  0.151843  ...     0.0   0.0      0
+P83110:Q53T59   3.665863       0.527048  0.142857  ...     0.0   0.0      0
+O00115:Q8WYK2   1.473055       0.610705  0.114099  ...     0.0   0.0      0
+P02792:Q96H20  11.690984       0.265821  0.083667  ...     0.0   0.0      0
+
+[5 rows x 11 columns]
+Total samples for splitting: 5538 (1008 P, 4530 N)
+Overall P:N ratio: 1:4.5
+Overall Baseline precision: 0.1820
+Press Enter to continue...=== Part 1: Training Classifiers on Full Data ===
+
+=== Training Classifier PrePPI -- total with features ['Total'] ===
+Model training complete for classifier PrePPI -- total.
+
+=== PrePPI -- total - Test Set Details: Total ===
+Actual Test Composition: 202 P, 906 N (Baseline Precision: 0.1823)
+Positive scores - Mean: 0.6550, Med: 0.9720, SD: 0.4278
+Negative scores - Mean: 0.0596, Med: 0.0000, SD: 0.1748
+Score separation (mean(P) - mean(N)) = 0.5955
+Thr 0.1: 266 preds, Prec = 0.5752, Rec = 0.7574
+Thr 0.5: 175 preds, Prec = 0.7486, Rec = 0.6485
+Thr 0.9: 126 preds, Prec = 0.9127, Rec = 0.5693
+
+=== Training Classifier RF: Genetic Features with features ['co-expression', 'BP', 'CC', 'MF'] ===
+Model training complete for classifier RF: Genetic Features.
+
+=== RF: Genetic Features - Test Set Details: co-expression,BP,CC,MF ===
+Actual Test Composition: 202 P, 906 N (Baseline Precision: 0.1823)
+Positive scores - Mean: 0.6179, Med: 0.7380, SD: 0.3237
+Negative scores - Mean: 0.0829, Med: 0.0220, SD: 0.1480
+Score separation (mean(P) - mean(N)) = 0.5350
+Thr 0.1: 378 preds, Prec = 0.4709, Rec = 0.8812
+Thr 0.5: 168 preds, Prec = 0.8036, Rec = 0.6683
+Thr 0.9: 52 preds, Prec = 0.9808, Rec = 0.2525
+
+=== Training Classifier RF: Genetic Features + HT/fident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident.
+
+=== RF: Genetic Features + HT/fident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident ===
+Actual Test Composition: 202 P, 906 N (Baseline Precision: 0.1823)
+Positive scores - Mean: 0.6772, Med: 0.8180, SD: 0.3523
+Negative scores - Mean: 0.0697, Med: 0.0210, SD: 0.1229
+Score separation (mean(P) - mean(N)) = 0.6076
+Thr 0.1: 360 preds, Prec = 0.4861, Rec = 0.8663
+Thr 0.5: 164 preds, Prec = 0.8780, Rec = 0.7129
+Thr 0.9: 93 preds, Prec = 0.9892, Rec = 0.4554
+
+=== Training Classifier RF: Genetic Features + HT/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/pident.
+
+=== RF: Genetic Features + HT/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,pident ===
+Actual Test Composition: 202 P, 906 N (Baseline Precision: 0.1823)
+Positive scores - Mean: 0.6753, Med: 0.8130, SD: 0.3531
+Negative scores - Mean: 0.0699, Med: 0.0220, SD: 0.1237
+Score separation (mean(P) - mean(N)) = 0.6054
+Thr 0.1: 367 preds, Prec = 0.4768, Rec = 0.8663
+Thr 0.5: 164 preds, Prec = 0.8841, Rec = 0.7178
+Thr 0.9: 91 preds, Prec = 0.9890, Rec = 0.4455
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident.
+
+=== RF: Genetic Features + HT/fident/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident ===
+Actual Test Composition: 202 P, 906 N (Baseline Precision: 0.1823)
+Positive scores - Mean: 0.6748, Med: 0.8210, SD: 0.3536
+Negative scores - Mean: 0.0695, Med: 0.0220, SD: 0.1223
+Score separation (mean(P) - mean(N)) = 0.6053
+Thr 0.1: 356 preds, Prec = 0.4888, Rec = 0.8614
+Thr 0.5: 164 preds, Prec = 0.8841, Rec = 0.7178
+Thr 0.9: 90 preds, Prec = 0.9889, Rec = 0.4406
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/e-value with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'evalue'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/e-value.
+
+=== RF: Genetic Features + HT/fident/pident/e-value - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,evalue ===
+Actual Test Composition: 202 P, 906 N (Baseline Precision: 0.1823)
+Positive scores - Mean: 0.6759, Med: 0.8020, SD: 0.3524
+Negative scores - Mean: 0.0706, Med: 0.0220, SD: 0.1244
+Score separation (mean(P) - mean(N)) = 0.6053
+Thr 0.1: 362 preds, Prec = 0.4807, Rec = 0.8614
+Thr 0.5: 162 preds, Prec = 0.8765, Rec = 0.7030
+Thr 0.9: 91 preds, Prec = 0.9890, Rec = 0.4455
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/bit-score with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'bits'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/bit-score.
+
+=== RF: Genetic Features + HT/fident/pident/bit-score - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,bits ===
+Actual Test Composition: 202 P, 906 N (Baseline Precision: 0.1823)
+Positive scores - Mean: 0.6734, Med: 0.8060, SD: 0.3513
+Negative scores - Mean: 0.0697, Med: 0.0220, SD: 0.1232
+Score separation (mean(P) - mean(N)) = 0.6037
+Thr 0.1: 359 preds, Prec = 0.4847, Rec = 0.8614
+Thr 0.5: 161 preds, Prec = 0.8944, Rec = 0.7129
+Thr 0.9: 91 preds, Prec = 0.9780, Rec = 0.4406
+
+============================================================
+Press Enter to continue...
+============================================================
+
+=== Part 2: Training Classifiers with Class Ratios ===
+Balanced training set size: P: 806, N: 806
+Training Classifier RF: Genetic Features with balanced 1:1 train set...
+Training Classifier RF: Genetic Features + HT/fident with balanced 1:1 train set...
+Training Classifier RF: Genetic Features + HT/pident with balanced 1:1 train set...
+Training Classifier RF: Genetic Features + HT/fident/pident with balanced 1:1 train set...
+Training Classifier RF: Genetic Features + HT/fident/pident/e-value with balanced 1:1 train set...
+Training Classifier RF: Genetic Features + HT/fident/pident/bit-score with balanced 1:1 train set...
+All classifiers trained on balanced 1:1 training set.
+
+============================================================
+=== Target Class Ratio 1:1 ===
+  Target Pos:Neg Ratio 1:1 -> Actual Test Set: 202P, 202N (Ratio: 1:1.0). Negatives created from 906 unique negatives (oversampled if needed).
+Test set size: P: 202, N: 202
+Overall Baseline Precision: 0.5000
+
+=== Training Classifier PrePPI -- total with features ['Total'] ===
+Model training complete for classifier PrePPI -- total.
+
+=== PrePPI -- total - Test Set Details: Total ===
+Actual Test Composition: 202 P, 202 N (Baseline Precision: 0.5000)
+Positive scores - Mean: 14299366.5297, Med: 1487.6404, SD: 81724563.0443
+Negative scores - Mean: 69.4408, Med: 2.0053, SD: 738.0540
+Score separation (mean(P) - mean(N)) = 14299297.0888
+Thr 0.1: 403 preds, Prec = 0.5012, Rec = 1.0000
+Thr 0.5: 371 preds, Prec = 0.5310, Rec = 0.9752
+Thr 0.9: 338 preds, Prec = 0.5799, Rec = 0.9703
+
+=== Training Classifier RF: Genetic Features with features ['co-expression', 'BP', 'CC', 'MF'] ===
+Model training complete for classifier RF: Genetic Features.
+
+=== RF: Genetic Features - Test Set Details: co-expression,BP,CC,MF ===
+Actual Test Composition: 202 P, 202 N (Baseline Precision: 0.5000)
+Positive scores - Mean: 0.7731, Med: 0.9060, SD: 0.2775
+Negative scores - Mean: 0.1959, Med: 0.1240, SD: 0.2167
+Score separation (mean(P) - mean(N)) = 0.5772
+Thr 0.1: 307 preds, Prec = 0.6515, Rec = 0.9901
+Thr 0.5: 187 preds, Prec = 0.8770, Rec = 0.8119
+Thr 0.9: 105 preds, Prec = 0.9905, Rec = 0.5149
+
+=== Training Classifier RF: Genetic Features + HT/fident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident.
+
+=== RF: Genetic Features + HT/fident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident ===
+Actual Test Composition: 202 P, 202 N (Baseline Precision: 0.5000)
+Positive scores - Mean: 0.7945, Med: 0.9600, SD: 0.2874
+Negative scores - Mean: 0.1831, Med: 0.1100, SD: 0.2021
+Score separation (mean(P) - mean(N)) = 0.6114
+Thr 0.1: 303 preds, Prec = 0.6502, Rec = 0.9752
+Thr 0.5: 185 preds, Prec = 0.8973, Rec = 0.8218
+Thr 0.9: 120 preds, Prec = 0.9833, Rec = 0.5842
+
+=== Training Classifier RF: Genetic Features + HT/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/pident.
+
+=== RF: Genetic Features + HT/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,pident ===
+Actual Test Composition: 202 P, 202 N (Baseline Precision: 0.5000)
+Positive scores - Mean: 0.7956, Med: 0.9640, SD: 0.2890
+Negative scores - Mean: 0.1807, Med: 0.1090, SD: 0.2012
+Score separation (mean(P) - mean(N)) = 0.6149
+Thr 0.1: 301 preds, Prec = 0.6578, Rec = 0.9802
+Thr 0.5: 185 preds, Prec = 0.9081, Rec = 0.8317
+Thr 0.9: 120 preds, Prec = 0.9833, Rec = 0.5842
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident.
+
+=== RF: Genetic Features + HT/fident/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident ===
+Actual Test Composition: 202 P, 202 N (Baseline Precision: 0.5000)
+Positive scores - Mean: 0.7956, Med: 0.9580, SD: 0.2898
+Negative scores - Mean: 0.1805, Med: 0.1060, SD: 0.1989
+Score separation (mean(P) - mean(N)) = 0.6151
+Thr 0.1: 301 preds, Prec = 0.6512, Rec = 0.9703
+Thr 0.5: 182 preds, Prec = 0.9176, Rec = 0.8267
+Thr 0.9: 118 preds, Prec = 0.9831, Rec = 0.5743
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/e-value with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'evalue'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/e-value.
+
+=== RF: Genetic Features + HT/fident/pident/e-value - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,evalue ===
+Actual Test Composition: 202 P, 202 N (Baseline Precision: 0.5000)
+Positive scores - Mean: 0.7937, Med: 0.9650, SD: 0.2890
+Negative scores - Mean: 0.1830, Med: 0.1080, SD: 0.2008
+Score separation (mean(P) - mean(N)) = 0.6107
+Thr 0.1: 305 preds, Prec = 0.6525, Rec = 0.9851
+Thr 0.5: 185 preds, Prec = 0.9081, Rec = 0.8317
+Thr 0.9: 117 preds, Prec = 0.9829, Rec = 0.5693
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/bit-score with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'bits'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/bit-score.
+
+=== RF: Genetic Features + HT/fident/pident/bit-score - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,bits ===
+Actual Test Composition: 202 P, 202 N (Baseline Precision: 0.5000)
+Positive scores - Mean: 0.7967, Med: 0.9620, SD: 0.2875
+Negative scores - Mean: 0.1820, Med: 0.1150, SD: 0.1991
+Score separation (mean(P) - mean(N)) = 0.6148
+Thr 0.1: 303 preds, Prec = 0.6502, Rec = 0.9752
+Thr 0.5: 185 preds, Prec = 0.9081, Rec = 0.8317
+Thr 0.9: 118 preds, Prec = 0.9831, Rec = 0.5743
+
+============================================================
+=== Target Class Ratio 1:10 ===
+  Target Pos:Neg Ratio 1:10 -> Actual Test Set: 202P, 2020N (Ratio: 1:10.0). Negatives created from 906 unique negatives (oversampled if needed).
+Test set size: P: 202, N: 2020
+Overall Baseline Precision: 0.0909
+
+=== Training Classifier PrePPI -- total with features ['Total'] ===
+Model training complete for classifier PrePPI -- total.
+
+=== PrePPI -- total - Test Set Details: Total ===
+Actual Test Composition: 202 P, 2020 N (Baseline Precision: 0.0909)
+Positive scores - Mean: 14299366.5297, Med: 1487.6404, SD: 81724563.0443
+Negative scores - Mean: 35.8117, Med: 2.1268, SD: 503.2317
+Score separation (mean(P) - mean(N)) = 14299330.7180
+Thr 0.1: 2214 preds, Prec = 0.0912, Rec = 1.0000
+Thr 0.5: 1934 preds, Prec = 0.1019, Rec = 0.9752
+Thr 0.9: 1640 preds, Prec = 0.1195, Rec = 0.9703
+
+=== Training Classifier RF: Genetic Features with features ['co-expression', 'BP', 'CC', 'MF'] ===
+Model training complete for classifier RF: Genetic Features.
+
+=== RF: Genetic Features - Test Set Details: co-expression,BP,CC,MF ===
+Actual Test Composition: 202 P, 2020 N (Baseline Precision: 0.0909)
+Positive scores - Mean: 0.7731, Med: 0.9060, SD: 0.2775
+Negative scores - Mean: 0.2079, Med: 0.1140, SD: 0.2329
+Score separation (mean(P) - mean(N)) = 0.5652
+Thr 0.1: 1235 preds, Prec = 0.1619, Rec = 0.9901
+Thr 0.5: 435 preds, Prec = 0.3770, Rec = 0.8119
+Thr 0.9: 138 preds, Prec = 0.7536, Rec = 0.5149
+
+=== Training Classifier RF: Genetic Features + HT/fident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident.
+
+=== RF: Genetic Features + HT/fident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident ===
+Actual Test Composition: 202 P, 2020 N (Baseline Precision: 0.0909)
+Positive scores - Mean: 0.7945, Med: 0.9600, SD: 0.2874
+Negative scores - Mean: 0.1904, Med: 0.1100, SD: 0.2113
+Score separation (mean(P) - mean(N)) = 0.6041
+Thr 0.1: 1260 preds, Prec = 0.1563, Rec = 0.9752
+Thr 0.5: 368 preds, Prec = 0.4511, Rec = 0.8218
+Thr 0.9: 137 preds, Prec = 0.8613, Rec = 0.5842
+
+=== Training Classifier RF: Genetic Features + HT/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/pident.
+
+=== RF: Genetic Features + HT/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,pident ===
+Actual Test Composition: 202 P, 2020 N (Baseline Precision: 0.0909)
+Positive scores - Mean: 0.7956, Med: 0.9640, SD: 0.2890
+Negative scores - Mean: 0.1890, Med: 0.1060, SD: 0.2115
+Score separation (mean(P) - mean(N)) = 0.6066
+Thr 0.1: 1241 preds, Prec = 0.1595, Rec = 0.9802
+Thr 0.5: 372 preds, Prec = 0.4516, Rec = 0.8317
+Thr 0.9: 142 preds, Prec = 0.8310, Rec = 0.5842
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident.
+
+=== RF: Genetic Features + HT/fident/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident ===
+Actual Test Composition: 202 P, 2020 N (Baseline Precision: 0.0909)
+Positive scores - Mean: 0.7956, Med: 0.9580, SD: 0.2898
+Negative scores - Mean: 0.1875, Med: 0.1060, SD: 0.2082
+Score separation (mean(P) - mean(N)) = 0.6081
+Thr 0.1: 1246 preds, Prec = 0.1573, Rec = 0.9703
+Thr 0.5: 349 preds, Prec = 0.4785, Rec = 0.8267
+Thr 0.9: 135 preds, Prec = 0.8593, Rec = 0.5743
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/e-value with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'evalue'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/e-value.
+
+=== RF: Genetic Features + HT/fident/pident/e-value - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,evalue ===
+Actual Test Composition: 202 P, 2020 N (Baseline Precision: 0.0909)
+Positive scores - Mean: 0.7937, Med: 0.9650, SD: 0.2890
+Negative scores - Mean: 0.1900, Med: 0.1040, SD: 0.2100
+Score separation (mean(P) - mean(N)) = 0.6038
+Thr 0.1: 1267 preds, Prec = 0.1571, Rec = 0.9851
+Thr 0.5: 365 preds, Prec = 0.4603, Rec = 0.8317
+Thr 0.9: 135 preds, Prec = 0.8519, Rec = 0.5693
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/bit-score with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'bits'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/bit-score.
+
+=== RF: Genetic Features + HT/fident/pident/bit-score - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,bits ===
+Actual Test Composition: 202 P, 2020 N (Baseline Precision: 0.0909)
+Positive scores - Mean: 0.7967, Med: 0.9620, SD: 0.2875
+Negative scores - Mean: 0.1892, Med: 0.1040, SD: 0.2106
+Score separation (mean(P) - mean(N)) = 0.6075
+Thr 0.1: 1234 preds, Prec = 0.1596, Rec = 0.9752
+Thr 0.5: 366 preds, Prec = 0.4590, Rec = 0.8317
+Thr 0.9: 138 preds, Prec = 0.8406, Rec = 0.5743
+
+============================================================
+=== Target Class Ratio 1:100 ===
+  Target Pos:Neg Ratio 1:100 -> Actual Test Set: 202P, 20200N (Ratio: 1:100.0). Negatives created from 906 unique negatives (oversampled if needed).
+Test set size: P: 202, N: 20200
+Overall Baseline Precision: 0.0099
+
+=== Training Classifier PrePPI -- total with features ['Total'] ===
+Model training complete for classifier PrePPI -- total.
+
+=== PrePPI -- total - Test Set Details: Total ===
+Actual Test Composition: 202 P, 20200 N (Baseline Precision: 0.0099)
+Positive scores - Mean: 14299366.5297, Med: 1487.6404, SD: 81724563.0443
+Negative scores - Mean: 45.4411, Med: 2.2873, SD: 549.0325
+Score separation (mean(P) - mean(N)) = 14299321.0886
+Thr 0.1: 20280 preds, Prec = 0.0100, Rec = 1.0000
+Thr 0.5: 17525 preds, Prec = 0.0112, Rec = 0.9752
+Thr 0.9: 14892 preds, Prec = 0.0132, Rec = 0.9703
+
+=== Training Classifier RF: Genetic Features with features ['co-expression', 'BP', 'CC', 'MF'] ===
+Model training complete for classifier RF: Genetic Features.
+
+=== RF: Genetic Features - Test Set Details: co-expression,BP,CC,MF ===
+Actual Test Composition: 202 P, 20200 N (Baseline Precision: 0.0099)
+Positive scores - Mean: 0.7731, Med: 0.9060, SD: 0.2775
+Negative scores - Mean: 0.2106, Med: 0.1260, SD: 0.2291
+Score separation (mean(P) - mean(N)) = 0.5625
+Thr 0.1: 11178 preds, Prec = 0.0179, Rec = 0.9901
+Thr 0.5: 2680 preds, Prec = 0.0612, Rec = 0.8119
+Thr 0.9: 468 preds, Prec = 0.2222, Rec = 0.5149
+
+=== Training Classifier RF: Genetic Features + HT/fident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident.
+
+=== RF: Genetic Features + HT/fident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident ===
+Actual Test Composition: 202 P, 20200 N (Baseline Precision: 0.0099)
+Positive scores - Mean: 0.7945, Med: 0.9600, SD: 0.2874
+Negative scores - Mean: 0.1916, Med: 0.1160, SD: 0.2073
+Score separation (mean(P) - mean(N)) = 0.6029
+Thr 0.1: 11063 preds, Prec = 0.0178, Rec = 0.9752
+Thr 0.5: 2117 preds, Prec = 0.0784, Rec = 0.8218
+Thr 0.9: 290 preds, Prec = 0.4069, Rec = 0.5842
+
+=== Training Classifier RF: Genetic Features + HT/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/pident.
+
+=== RF: Genetic Features + HT/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,pident ===
+Actual Test Composition: 202 P, 20200 N (Baseline Precision: 0.0099)
+Positive scores - Mean: 0.7956, Med: 0.9640, SD: 0.2890
+Negative scores - Mean: 0.1905, Med: 0.1160, SD: 0.2082
+Score separation (mean(P) - mean(N)) = 0.6051
+Thr 0.1: 10994 preds, Prec = 0.0180, Rec = 0.9802
+Thr 0.5: 2125 preds, Prec = 0.0791, Rec = 0.8317
+Thr 0.9: 330 preds, Prec = 0.3576, Rec = 0.5842
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident.
+
+=== RF: Genetic Features + HT/fident/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident ===
+Actual Test Composition: 202 P, 20200 N (Baseline Precision: 0.0099)
+Positive scores - Mean: 0.7956, Med: 0.9580, SD: 0.2898
+Negative scores - Mean: 0.1899, Med: 0.1120, SD: 0.2051
+Score separation (mean(P) - mean(N)) = 0.6057
+Thr 0.1: 11092 preds, Prec = 0.0177, Rec = 0.9703
+Thr 0.5: 1964 preds, Prec = 0.0850, Rec = 0.8267
+Thr 0.9: 273 preds, Prec = 0.4249, Rec = 0.5743
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/e-value with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'evalue'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/e-value.
+
+=== RF: Genetic Features + HT/fident/pident/e-value - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,evalue ===
+Actual Test Composition: 202 P, 20200 N (Baseline Precision: 0.0099)
+Positive scores - Mean: 0.7937, Med: 0.9650, SD: 0.2890
+Negative scores - Mean: 0.1911, Med: 0.1200, SD: 0.2061
+Score separation (mean(P) - mean(N)) = 0.6026
+Thr 0.1: 11163 preds, Prec = 0.0178, Rec = 0.9851
+Thr 0.5: 2102 preds, Prec = 0.0799, Rec = 0.8317
+Thr 0.9: 264 preds, Prec = 0.4356, Rec = 0.5693
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/bit-score with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'bits'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/bit-score.
+
+=== RF: Genetic Features + HT/fident/pident/bit-score - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,bits ===
+Actual Test Composition: 202 P, 20200 N (Baseline Precision: 0.0099)
+Positive scores - Mean: 0.7967, Med: 0.9620, SD: 0.2875
+Negative scores - Mean: 0.1905, Med: 0.1160, SD: 0.2069
+Score separation (mean(P) - mean(N)) = 0.6062
+Thr 0.1: 11024 preds, Prec = 0.0179, Rec = 0.9752
+Thr 0.5: 2061 preds, Prec = 0.0815, Rec = 0.8317
+Thr 0.9: 309 preds, Prec = 0.3754, Rec = 0.5743
+
+============================================================
+=== Target Class Ratio 1:1000 ===
+  Target Pos:Neg Ratio 1:1000 -> Actual Test Set: 202P, 202000N (Ratio: 1:1000.0). Negatives created from 906 unique negatives (oversampled if needed).
+Test set size: P: 202, N: 202000
+Overall Baseline Precision: 0.0010
+
+=== Training Classifier PrePPI -- total with features ['Total'] ===
+Model training complete for classifier PrePPI -- total.
+
+=== PrePPI -- total - Test Set Details: Total ===
+Actual Test Composition: 202 P, 202000 N (Baseline Precision: 0.0010)
+Positive scores - Mean: 14299366.5297, Med: 1487.6404, SD: 81724563.0443
+Negative scores - Mean: 41.8523, Med: 2.2135, SD: 511.6181
+Score separation (mean(P) - mean(N)) = 14299324.6773
+Thr 0.1: 200907 preds, Prec = 0.0010, Rec = 1.0000
+Thr 0.5: 172681 preds, Prec = 0.0011, Rec = 0.9752
+Thr 0.9: 146344 preds, Prec = 0.0013, Rec = 0.9703
+
+=== Training Classifier RF: Genetic Features with features ['co-expression', 'BP', 'CC', 'MF'] ===
+Model training complete for classifier RF: Genetic Features.
+
+=== RF: Genetic Features - Test Set Details: co-expression,BP,CC,MF ===
+Actual Test Composition: 202 P, 202000 N (Baseline Precision: 0.0010)
+Positive scores - Mean: 0.7731, Med: 0.9060, SD: 0.2775
+Negative scores - Mean: 0.2095, Med: 0.1280, SD: 0.2286
+Score separation (mean(P) - mean(N)) = 0.5636
+Thr 0.1: 109868 preds, Prec = 0.0018, Rec = 0.9901
+Thr 0.5: 24813 preds, Prec = 0.0066, Rec = 0.8119
+Thr 0.9: 3687 preds, Prec = 0.0282, Rec = 0.5149
+
+=== Training Classifier RF: Genetic Features + HT/fident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident.
+
+=== RF: Genetic Features + HT/fident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident ===
+Actual Test Composition: 202 P, 202000 N (Baseline Precision: 0.0010)
+Positive scores - Mean: 0.7945, Med: 0.9600, SD: 0.2874
+Negative scores - Mean: 0.1906, Med: 0.1160, SD: 0.2071
+Score separation (mean(P) - mean(N)) = 0.6039
+Thr 0.1: 109164 preds, Prec = 0.0018, Rec = 0.9752
+Thr 0.5: 19723 preds, Prec = 0.0084, Rec = 0.8218
+Thr 0.9: 1859 preds, Prec = 0.0635, Rec = 0.5842
+
+=== Training Classifier RF: Genetic Features + HT/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/pident.
+
+=== RF: Genetic Features + HT/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,pident ===
+Actual Test Composition: 202 P, 202000 N (Baseline Precision: 0.0010)
+Positive scores - Mean: 0.7956, Med: 0.9640, SD: 0.2890
+Negative scores - Mean: 0.1895, Med: 0.1160, SD: 0.2079
+Score separation (mean(P) - mean(N)) = 0.6060
+Thr 0.1: 108241 preds, Prec = 0.0018, Rec = 0.9802
+Thr 0.5: 19773 preds, Prec = 0.0085, Rec = 0.8317
+Thr 0.9: 2331 preds, Prec = 0.0506, Rec = 0.5842
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident.
+
+=== RF: Genetic Features + HT/fident/pident - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident ===
+Actual Test Composition: 202 P, 202000 N (Baseline Precision: 0.0010)
+Positive scores - Mean: 0.7956, Med: 0.9580, SD: 0.2898
+Negative scores - Mean: 0.1888, Med: 0.1120, SD: 0.2047
+Score separation (mean(P) - mean(N)) = 0.6068
+Thr 0.1: 109551 preds, Prec = 0.0018, Rec = 0.9703
+Thr 0.5: 17995 preds, Prec = 0.0093, Rec = 0.8267
+Thr 0.9: 1639 preds, Prec = 0.0708, Rec = 0.5743
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/e-value with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'evalue'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/e-value.
+
+=== RF: Genetic Features + HT/fident/pident/e-value - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,evalue ===
+Actual Test Composition: 202 P, 202000 N (Baseline Precision: 0.0010)
+Positive scores - Mean: 0.7937, Med: 0.9650, SD: 0.2890
+Negative scores - Mean: 0.1902, Med: 0.1200, SD: 0.2059
+Score separation (mean(P) - mean(N)) = 0.6035
+Thr 0.1: 110296 preds, Prec = 0.0018, Rec = 0.9851
+Thr 0.5: 19304 preds, Prec = 0.0087, Rec = 0.8317
+Thr 0.9: 1664 preds, Prec = 0.0691, Rec = 0.5693
+
+=== Training Classifier RF: Genetic Features + HT/fident/pident/bit-score with features ['co-expression', 'BP', 'CC', 'MF', 'has_templates', 'fident', 'pident', 'bits'] ===
+Model training complete for classifier RF: Genetic Features + HT/fident/pident/bit-score.
+
+=== RF: Genetic Features + HT/fident/pident/bit-score - Test Set Details: co-expression,BP,CC,MF,has_templates,fident,pident,bits ===
+Actual Test Composition: 202 P, 202000 N (Baseline Precision: 0.0010)
+Positive scores - Mean: 0.7967, Med: 0.9620, SD: 0.2875
+Negative scores - Mean: 0.1895, Med: 0.1180, SD: 0.2065
+Score separation (mean(P) - mean(N)) = 0.6073
+Thr 0.1: 108397 preds, Prec = 0.0018, Rec = 0.9752
+Thr 0.5: 19064 preds, Prec = 0.0088, Rec = 0.8317
+Thr 0.9: 2067 preds, Prec = 0.0561, Rec = 0.5743
+
+============================================================

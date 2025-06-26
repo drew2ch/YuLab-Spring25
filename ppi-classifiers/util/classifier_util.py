@@ -81,6 +81,8 @@ def analyze_predictions(
         print("Test set is empty for analysis.")
         return
     
+    y_test = np.asarray(y_test)
+    y_prob = np.asarray(y_prob)
     baseline_precision = n_pos_test / len(y_test) if len(y_test) > 0 else 0.0
     pos_scores = y_prob[y_test == 1] if n_pos_test > 0 else np.array([])
     neg_scores = y_prob[y_test == 0] if n_neg_test > 0 else np.array([])
@@ -190,10 +192,10 @@ def plot_roc_pr_with_ratios(results: dict, axes, cind, plot_title_detail, clf_ty
         label = f'{clf_type} ({results['roc_auc']:.3f})',
         linewidth = 1.5, ci = None
     )
-    axes[0, cind].set_title(f"Test set: {plot_title_detail}", fontsize = 11)
-    axes[0, cind].set_xlabel("False Positive Rate", fontsize = 9)
-    axes[0, cind].set_ylabel("True Positive Rate", fontsize = 9)
-    axes[0, cind].legend(loc = 'lower right', facecolor = 'white', fontsize = 7, frameon = True, fancybox = True)
+    axes[0, cind].set_title(f"Test set: {plot_title_detail}", fontsize = 12)
+    axes[0, cind].set_xlabel("False Positive Rate", fontsize = 10)
+    axes[0, cind].set_ylabel("True Positive Rate", fontsize = 10)
+    axes[0, cind].legend(loc = 'lower right', facecolor = 'white', fontsize = 6)
     axes[0, cind].plot([0, 1], [0, 1], linestyle = '--', color = 'gray', alpha = 0.5)
 
     # plot PR curve
@@ -202,9 +204,9 @@ def plot_roc_pr_with_ratios(results: dict, axes, cind, plot_title_detail, clf_ty
         label = f'{clf_type} ({results['pr_auc']:.3f})',
         linewidth = 1.5, ci = None
     )
-    axes[1, cind].set_xlabel('Recall', fontsize = 9)
-    axes[1, cind].set_xlabel('Precision', fontsize = 9)
-    axes[1, cind].legend(loc = 'best', facecolor = 'white', fontsize = 7, frameon = True, fancybox = True)
+    axes[1, cind].set_xlabel('Recall', fontsize = 10)
+    axes[1, cind].set_ylabel('Precision', fontsize = 10)
+    axes[1, cind].legend(loc = 'best', facecolor = 'white', fontsize = 6)
     axes[1, cind].set_ylim([0.0, 1.05])
 
     # refine figure aesthetics
