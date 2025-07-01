@@ -109,9 +109,10 @@ def templates_with_ident(
                 template_evalue = np.min([evalue_a, evalue_b])
                 template_bits = np.mean([bits_a, bits_b])
                 template_pairs.append([
-                    f"{pdb_a}-{chain_a}/{chain_b}", 
+                    # f"{pdb_a}-{chain_a}/{chain_b}", 
                     template_pident, template_fident, 
-                    template_evalue, template_bits
+                    template_evalue, template_bits,
+                    pdb_a, chain_a, chain_b
                 ])
 
     if not template_pairs: # no template pairs found
@@ -142,11 +143,11 @@ def complete_features(
     --- fident: structural identity score of the pair, calculated as the average of the fident scores of its constituent monomers.
         RETURNS: a pd.DataFrame object with the three aforementioned features appended at the end.
     """
+    assert 'ppi' in data.columns, "Critical Error: no 'ppi' column detected."
 
-    has_templates, pident, fident, evalue, bits = [], [], [], [], []
-
+    has_templates, pident, fident, evalue, bits, pdb_id, chain_a, chain_b = [], [], [], [], [], [], [], []
     for index, row in tqdm.tqdm(data.iterrows()):
-        proteins = row['ppi'].strip().split(':')
+        proteins = str(row['ppi']).strip().split(':')
         if len(proteins) < 2:
             print(f"Error: faulty PPI pair at index {index}: {row['ppi']}")
             continue
@@ -163,12 +164,18 @@ def complete_features(
             fident.append(0.0)
             evalue.append(0.0)
             bits.append(0.0)
+            pdb_id.append("NULL")
+            chain_a.append("NULL")
+            chain_b.append("NULL")
         else:
             has_templates.append(1)
-            pident.append(candidate_template[0, 1])
-            fident.append(candidate_template[0, 2])
-            evalue.append(candidate_template[0, 3])
-            bits.append(candidate_template[0, 4])
+            pident.append(candidate_template[0, 0])
+            fident.append(candidate_template[0, 1])
+            evalue.append(candidate_template[0, 2])
+            bits.append(candidate_template[0, 3])
+            pdb_id.append(candidate_template[0, 4])
+            chain_a.append(candidate_template[0, 5])
+            chain_b.append(candidate_template[0, 6])
     
     data_ = data.copy()
     data_['has_templates'] = has_templates
@@ -176,6 +183,10 @@ def complete_features(
     data_['fident'] = fident
     data_['evalue'] = evalue
     data_['bits'] = bits
+    data_['pdb_id'] = pdb_id
+    data_['chain_a'] = chain_a
+    data_['chain_b'] = chain_b
+
     return data_
 
 def load_homologs_tree(
@@ -231,7 +242,7 @@ def main():
     parser.add_argument("--output_file", default = DEFAULT_INPUT_FILE, help = "Output data file name: .csv")
     parser.add_argument("--rank_by", default = "fident", help = "Foldseek output metric to rank template pairs")
     parser.add_argument("--top_n", default = 1, help = "Top n template pairs")
-    parser.add_argument("--is_txt", action = "store_true", default = False, help = "Process as .txt file instead of .csv")
+    # parser.add_argument("--encode_template_id", action = "store_true", default = False, help = "Process as .txt file instead of .csv")
     args = parser.parse_args()
 
     # === identify and parse through .tsv results ===
@@ -250,24 +261,10 @@ def main():
     print("==================================================")
     print(f"Reading in {DATA_PATH}...")
 
-    if (args.is_txt and not args.input_file.endswith('.txt')) or \
-        (not args.is_txt and not args.input_file.endswith('.csv')):
-        print(f"Error: input file format mismatch with {args.input_file}. Exiting.")
-        return
-
     try:
-        if not args.is_txt: # if is_csv, read as comma-separated values
-            data = pd.read_csv(args.input_file, index_col = False)
-        else: # if is_txt, read as tab-separated values
-            pairs = pd.read_csv(
-                args.input_file, sep = '\t', 
-                index_col = False, header = None,
-                names = ['protein1', 'protein2']
-            )
-            data = pd.DataFrame(
-                pairs['protein1'] + ':' + pairs['protein2'],
-                columns = ['ppi']
-            )
+        data = pd.read_csv(
+            args.input_file, index_col = False
+        )
     except FileNotFoundError as e:
         print(f"Error: {DATA_PATH} not found: {e}. Exiting.")
         return
@@ -276,6 +273,8 @@ def main():
         return
 
     print(f"{DATA_PATH} contains {len(data)} distinct PPI pairs.")
+    print(data.head())
+    input("Press Enter to continue...")
 
     # === Evaluate Template Pairs and impute new features ===
     print("==================================================")
