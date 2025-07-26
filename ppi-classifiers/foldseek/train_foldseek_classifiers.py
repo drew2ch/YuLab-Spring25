@@ -6,6 +6,7 @@
 --- Classifier 4: Genomic + has_templates, fident, pident
 --- Classifier 5: Genomic + has_templates, fident, pident, e-value
 --- Classifier 6: Genomic + has_templates, fident, pident, bit-score
+--- Classifier 7: Genomic + has_templates, fident, pident, e-value, SIZE/COV
 === Andrew Chung, hc893; 6/16/2025 ===
 """
 

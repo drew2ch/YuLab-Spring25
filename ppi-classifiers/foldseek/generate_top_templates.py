@@ -7,7 +7,8 @@ import urllib.request
 import sys
 
 from Bio.Blast import NCBIXML
-from Bio.PDB import PDBParser, MMCIFParser, NeighborSearch
+from Bio.Blast.Applications import NcbiblastpCommandline
+from Bio.PDB import PDBParser, MMCIFParser, NeighborSearch, Superimposer
 from Bio.PDB.Residue import Residue
 from Bio.PDB.Atom import Atom
 import re
@@ -21,6 +22,7 @@ import tempfile
 import shutil
 import argparse
 import logging
+import subprocess
 import urllib.request
 
 import warnings
@@ -34,15 +36,17 @@ logging.basicConfig(
 warnings.simplefilter('ignore', PDBConstructionWarning)
 
 DEFAULT_USER_BASE_DIR = "C:/Users/hychu/OneDrive/Desktop/Summer25"
+DATA_BASE_DIR = "F:/Research/ppi-cdata" # utilizing external drive for data storage
 
-IRES_FILE = os.path.join(DEFAULT_USER_BASE_DIR, "pdb/ires_perpdb_alltax.txt")
-FASTA_FILE_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/uniprot_seqs_both_sets.txt")
-LOCAL_PDB_DIR = os.path.join(DEFAULT_USER_BASE_DIR, "pdb/templates/")
-FOLDSEEK_TSV_DIR = os.path.join(DEFAULT_USER_BASE_DIR, "homolog-results/foldseek/")
-
-BASE_OUTPUT_JSONL_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/")
-BASE_SCRATCH_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "scratch")
-DATAFILE_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/features_with_tempid.csv")
+IRES_TEMPLATE_FILE = os.path.join(DATA_BASE_DIR, "ires_perpdb_alltax.txt")
+IRES_QUERY_FILE = os.path.join(DATA_BASE_DIR, "ires_all.txt")
+FASTA_FILE_PATH = os.path.join(DATA_BASE_DIR, "uniprot_seqs_both_sets.txt")
+LOCAL_PDB_DIR = os.path.join(DATA_BASE_DIR, "pdb-templates/")
+FOLDSEEK_TSV_DIR = os.path.join(DATA_BASE_DIR, "foldseek-homologs/")
+AF3_MODELS_DIR = os.path.join(DATA_BASE_DIR, "af3-models/")
+BASE_OUTPUT_JSONL_PATH = os.path.join(DATA_BASE_DIR, "template-data")
+BASE_SCRATCH_PATH = os.path.join(DATA_BASE_DIR, "scratch")
+DATAFILE_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/features.csv")
 
 # RESIDUE_MAP as provided in your original script context (second script in first prompt)
 RESIDUE_MAP = {
@@ -83,23 +87,18 @@ def parse_bundle_chain_mapping(chainmapping_file):
     return chain_mapping
 
 def get_structure_from_file(pdb_id, pdb_dir):
-    """Loads structure from a .cif or .pdb file."""
-    pdb_id_lower = pdb_id.lower()
-    cif_path = os.path.join(pdb_dir, f"{pdb_id_lower}.cif")
-    pdb_path = os.path.join(pdb_dir, f"{pdb_id_lower}.pdb")
-
-    structure = None
-    if os.path.exists(cif_path):
-        parser = MMCIFParser(Quiet = True)
-        structure = parser.get_structure(pdb_id_lower, cif_path)
-    elif os.path.exists(pdb_path):
-        parser = PDBParser(QUIET = True)
-        structure = parser.get_structure(pdb_id_lower, pdb_path)
-    else:
-        logging.warning(f"Structure file for {pdb_id} not found in {pdb_dir}.")
-        return None
-    
-    return structure[0]
+    """Loads structure (template and query) from a .cif or .pdb file."""
+    for ext in ['.cif', '.pdb']:
+        path = os.path.join(pdb_dir, f"{pdb_id.lower()}{ext}")
+        if os.path.exists(path):
+            parser = MMCIFParser(QUIET = True) if ext == '.cif' else PDBParser(QUIET = True)
+            try:
+                return parser.get_structure(pdb_id, path)[0]
+            except Exception as e:
+                logging.error(f"Could not parse query structure {path}: {e}")
+                return None
+    logging.warning(f"Query structure not found for {pdb_id} in {pdb_dir}.")
+    return None
 
 def unzip_res_range(res_range):
 	'''Converts ranges in the form: [2-210] or [3-45,47A,47B,51-67] into lists of strings including all numbers in these ranges in order'''
@@ -158,62 +157,127 @@ def download_pdb(pdbcode, datadir, downloadurl = "https://files.rcsb.org/downloa
         print(f"  -> Error downloading {pdb_fn} as well: {e}")
         return None
 
-def get_mapped_binding_sites(alignment):
-    """Map binding sites from template to query by aligning query to PDB-extracted sequence using Foldseek."""
+def get_mapped_binding_sites(alignment, pdb_dir = LOCAL_PDB_DIR):
+    """
+    Maps binding sites from a Foldseek alignment to the query protein sequence by aligning the Foldseek-derived template sequence. It returns a dictionary mapping PDB residue IDs to query positions.
+    Does NOT involve BLAST alignment, but rather uses Foldseek's own alignment data. See below for BLAST 3-way alignment.
+    :param alignment: dict containing Foldseek alignment data (query, target, etc.)
+    :param pdb_dir: path to directory containing local PDB files
+    :return: dict mapping PDB residue IDs to query positions
+    """
+
+    # Check for required keys in the alignment data
+    required_keys = ['qaln', 'taln', 'qstart', 'tstart']
+    if not all(key in alignment for key in required_keys):
+        logging.warning("Alignment data is missing one or more required keys.")
+        return {}
+    
+    # Create direct mapping from template to query; iterate through alignment strings once.
+    # - 't_pos' = residue number in template PDB
+    # - 'q_pos' = residue number in query protein sequence
+    final_residue_map = {}
+    q_pos, t_pos = alignment.get('qstart'), alignment.get('tstart')
+
+    for i in range(len(alignment['taln'])):
+
+        if alignment['taln'][i] != "-" and alignment['qaln'][i] != '-':
+            final_residue_map[str(t_pos)] = q_pos - 1
+        
+        # if not gap, increment the position counters
+        if alignment['taln'][i] != "-": t_pos += 1
+        if alignment['qaln'][i] != "-": q_pos += 1
+    
+    return final_residue_map 
+
+"""
+    get_mapped_boinding_sites function incorporating BLAST PDB - Foldseek - Query 3-way alignment.
+    This function maps binding sites from a Foldseek alignment to the query protein sequence by 
+    aligning the Foldseek-derived template sequence to the PDB-extracted sequence using BLAST. It returns a dictionary mapping
+def get_mapped_binding_sites(
+        alignment: dict, # foldseek alignment data (query, target, ...)
+        pdb_dir: str = LOCAL_PDB_DIR # path saving template PDB files
+    ) -> dict[str, int]:
+    # Map binding sites from template to query by aligning query to PDB-extracted sequence using Foldseek.
 
     # Extract PDB ID and chain from the Foldseek hit
     pdb, chain = alignment["target"].split("_")
     pdb = pdb.split('-')[0].lower()  # Standard PDB ID in lowercase
 
     # Get structure model from local .cif or .pdb files
-    t_protein_model = get_structure_from_file(pdb, LOCAL_PDB_DIR)
+    t_protein_model = get_structure_from_file(pdb, pdb_dir)
     if t_protein_model is None or chain not in t_protein_model:
         logging.warning(f"Could not get chain '{chain}' for PDB '{pdb}' from local files.")
         return {}
     
     t_chain = t_protein_model[chain]
     scratch_dir = tempfile.mkdtemp(dir = BASE_SCRATCH_PATH)
+    logging.debug(f"Created temporary directory: {scratch_dir}")
 
     try:
-        """ Perform 3-way sequence aligment.
+        Perform 3-way sequence aligment.
             - A   = the original query protein sequence
             - A'  = the Foldseek-derived template sequence
             - A'' = the PDB structure's sequence
             First, map PDB sequence to Foldseek sequence
             Second, map the Foldseek sequence to the query sequence
-        """
-        # Extract sequence (A'') and residue IDs from PDB structure
+        
+        # 1. Extract sequence (A'') and residue IDs from PDB structure
         t_residue_id_pos_mapping = {res.id[1]: i + 1 for i, res in enumerate(t_chain.get_residues())}
         t_pdb_seq = ''.join([RESIDUE_MAP.get(res.resname, "X") for res in t_chain.get_residues()])
-        print(f"DEBUG: For PDB {pdb}_{chain}, t_residue_id_pos_mapping (first 10): {t_residue_id_pos_mapping[:10]}")
+        if not t_pdb_seq:
+            logging.warning(f"No valid residues found to extract sequence for PDB {pdb}_{chain}.")
+            return {}
+        print(f"DEBUG: For PDB {pdb}_{chain}, t_residue_id_pos_mapping (first 10): {list(t_residue_id_pos_mapping.items())[:10]}")
         print(f"Extracted sequence for chain {chain}: {t_pdb_seq}")
 
         # Get foldseek sequence (A') from alignment
-        t_foldseek_seq = alignment['tseq']
+        t_foldseek_seq = alignment['taln'].replace('-', '')
 
-        # Align PDB sequence (A'') with Foldseek sequence (A') using BLAST
+        # 2. Align PDB sequence (A'') with Foldseek sequence (A') using BLAST
         t_pdb_seq_file = os.path.join(scratch_dir, "t_pdb_seq.fasta")
         with open(t_pdb_seq_file, 'w') as f:
             f.write(f">{pdb}_{chain}\n{t_pdb_seq}\n")
+
         t_foldseek_seq_file = os.path.join(scratch_dir, "t_foldseek_seq.fasta")
         with open(t_foldseek_seq_file, 'w') as f:
             f.write(f">{alignment['target']}\n{t_foldseek_seq}\n")
         
-        ## perform BLAST alignment of A' to A''
+        ## perform BLAST alignment: A' to A''
         blast_result_file = os.path.join(scratch_dir, "blast_result.xml")
-        os.system(f"blastp -query {t_foldseek_seq_file} -subject {t_pdb_seq_file} -out {blast_result_file} -outfmt 5")
-        if not os.path.exists(blast_result_file) or os.path.getsize(blast_result_file) == 0:
-            logging.warning(f"BLAST alignment failed for {alignment['target']}")
+        blastp_cline = NcbiblastpCommandline(
+            query = t_foldseek_seq_file,
+            subject = t_pdb_seq_file,
+            out = blast_result_file,
+            outfmt = 5
+        )
+        logging.debug(f"Executing BLAST Command: {blastp_cline}")
+        # os.system(f"blastp -query {t_foldseek_seq_file} -subject {t_pdb_seq_file} -out {blast_result_file} -outfmt 5")
+
+        try:
+            stdout, stderr = blastp_cline()
+        except subprocess.CalledProcessError as e:
+            logging.error(f"BLAST alignment failed for {alignment['target']}. Stderr: {e.stderr}")
             return {}
+        except FileNotFoundError:
+            logging.error(f"BLAST+ executables not found. Please ensure BLAST+ installed and in system's PATH.")
+            return {}
+        if not os.path.exists(blast_result_file) or os.path.getsize(blast_result_file) == 0:
+            logging.warning(f"BLAST generated empty result file for {alignment['target']}")
+            return {}
+        
         with open(blast_result_file) as result:
             blast_record = NCBIXML.read(result)
         if not blast_record.alignments or blast_record.alignments[0].hsps:
-            logging.warning(f"No BLAST HSP found for {alignment['target']}")
+            logging.warning(f"No BLAST HSP found for {alignment['target']} vs PDB {pdb}_{chain}.")
             return {}
+        
         hsp = blast_record.alignments[0].hsps[0] # take top HSP
+        logging.debug(f"BLAST HSP found. Identity: {hsp.identities/len(hsp.query) * 100:.2f}%, E-value = {hsp.expect}")
+        logging.debug(f"BLAST alignment query start: {hsp.query_start}, subject start: {hsp.sbjct_start}")
 
-        # create mapping dictionaries: PDB -> Foldseek -> Query
-        # Map PDB positions (A'') to Foldseek sequence positions (A')
+        # 3. create mapping dictionaries: PDB -> Foldseek -> Query
+
+        # Map 3a. PDB positions (A'') to Foldseek sequence positions (A')
         pdb_to_foldseek_map = {}
         q_pos, s_pos = hsp.query_start, hsp.sbjct_start
 
@@ -222,36 +286,59 @@ def get_mapped_binding_sites(alignment):
                 pdb_to_foldseek_map[s_pos] = q_pos
             if hsp.sbjct[i] != "-": s_pos += 1
             if hsp.query[i] != "-": q_pos += 1
+        logging.debug(f"PDB to Foldseek map size = {len(pdb_to_foldseek_map)}")
         
-        # Map Foldseek sequence positions (A') to Query sequence positions (A)
+        # Map 3b. Map Foldseek sequence positions (A') to Query sequence positions (A)
         foldseek_to_query_map = {}
-        q_pos, t_pos = alignment["qstart"], alignment["tstart"]
+        q_pos, t_pos = alignment.get("qstart"), alignment.get("tstart")
         for i in range(len(alignment["taln"])):
             if alignment["taln"][i] != "-" and alignment["qaln"][i] != "-":
                 foldseek_to_query_map[t_pos] = q_pos
             if alignment["taln"][i] != "-": t_pos += 1
             if alignment["qaln"][i] != "-": q_pos += 1
+        logging.debug(f"Foldseek to Query map size = {len(foldseek_to_query_map)}")
+
+        # Map 3c. (Bridge) Gapless taln position -> Full PDB residue number; fix coordinate system mismatch
+        gapless_to_full_target_map = {}
+        gapless_pos = 1
+        full_target_pos = alignment.get('tstart')
+        for residue in alignment['taln']:
+            if residue != '-':
+                gapless_to_full_target_map[gapless_pos] = full_target_pos
+                gapless_pos += 1
+                full_target_pos += 1
 
         print(f"BLAST command: blastp -query {t_foldseek_seq_file} -subject {t_pdb_seq_file} -outfmt 5")
         print(f"Alignment: query = {hsp.query}, sbjct = {hsp.sbjct}")
         print(f"Identity: {hsp.identities / len(hsp.query) * 100:.2f}%, E-value: {hsp.expect}")
         print(f"Foldseek alignment: qaln = {alignment['qaln']}, taln = {alignment['taln']}")
 
-        # chain maps together to create PDB-Query map
+        # 6. chain maps together to create final PDB-Query map
         final_residue_map = {}
         for res_id, pdb_pos in t_residue_id_pos_mapping.items():
-            foldseek_pos = pdb_to_foldseek_map.get(pdb_pos)
-            if foldseek_pos:
-                query_pos = foldseek_to_query_map.get(foldseek_pos)
-                if query_pos:
-                    # convert from 1-based to 0-based index for final query position
-                    final_residue_map[str(res_id)] = query_pos - 1
+
+            # Step 6a. PDB sequential pos -> Gapless taln position
+            gapless_taln_pos = pdb_to_foldseek_map.get(pdb_pos)
+            if not gapless_taln_pos:
+                continue
+
+            # Step 6b. Gapless taln position -> Full PDB residue number (bridge)\
+            full_target_pos = gapless_to_full_target_map.get(gapless_taln_pos)
+            if not full_target_pos:
+                continue
+
+            # Step 6c. Full PDB residue number -> Query position
+            query_pos = foldseek_to_query_map.get(full_target_pos)
+            if query_pos is None:
+                final_residue_map[str(res_id)] = query_pos - 1 # convert to 0-based index
 
         return final_residue_map
 
     finally:
         # need to clean up temporary directory for subsequent use
-        shutil.rmtree(scratch_dir)
+        if os.path.exists(scratch_dir):
+            shutil.rmtree(scratch_dir)
+            logging.debug(f"Cleaned up temporary directory: {scratch_dir}")"""
 
 def parse_foldseek_tsv(tsv_file):
     if not os.path.exists(tsv_file) or os.path.getsize(tsv_file) == 0:
@@ -278,22 +365,30 @@ def get_sequence_from_dict(uniprot_id, fasta_dict):
     seq = fasta_dict.get(uniprot_id)
     return seq
 
-def process_single_pair(p1_id, p2_id, dataset_name, fasta_sequences_dict, ires_df, pair_output_idx, rerun_xml = False, out_dir = None, chunk_id = None):
+def process_single_pair(p1_id, p2_id, ires_df, index: int):
 
     pair_key = f"{p1_id}_{p2_id}"
-    logging.info(f"Processing pair: {pair_key}")
+    logging.info(f"Processing pair {index}: {pair_key}")
+    pair_data = {
+        "pair": pair_key,
+        "condition_1": {},
+        "condition_2": {}
+    }
 
     # SETUP: Define paths to Foldseek results
-    alignments1 = parse_foldseek_tsv(os.path.join(FOLDSEEK_TSV_DIR, f"{p1_id}.tsv"))
-    alignments2 = parse_foldseek_tsv(os.path.join(FOLDSEEK_TSV_DIR, f"{p2_id}.tsv"))
-    # if either query protein does not return any homologs, or if for whatever reason the
-    # Foldseek-returned .tsv files are empty, there is no point in searching for template pairs.
-    if not alignments1 or not alignments2:
-        logging.warning(f"No Foldseek hits found for one or both proteins in {pair_key}. Skipping.")
-        return
-
-    # STAGE 1: Collect all valid template candidates
+    try:
+        alignments1 = parse_foldseek_tsv(os.path.join(FOLDSEEK_TSV_DIR, f"{p1_id}.tsv"))
+        alignments2 = parse_foldseek_tsv(os.path.join(FOLDSEEK_TSV_DIR, f"{p2_id}.tsv"))
+        if not alignments1 or not alignments2:
+            logging.warning(f"No Foldseek hits for {pair_key}.")
+            return pair_data # Return no data
+    except Exception as e:
+        logging.error(f"Error parsing Foldseek TSV files for {pair_key}: {e}")
+        return pair_data
+    
+    # --- STAGE 1: Collect all valid template candidates ---
     candidate_templates = []
+    
     for align1 in alignments1:
         for align2 in alignments2:
             pdb1_full, chain1 = align1['target'].rsplit('_', 1)
@@ -330,7 +425,9 @@ def process_single_pair(p1_id, p2_id, dataset_name, fasta_sequences_dict, ires_d
     # if no valid template pairs found, structural data cannot be encoded
     if not candidate_templates:
         logging.info(f"No valid templates found for {pair_key}.")
-        return
+        return pair_data
+    else:
+        logging.info(f"Found {len(candidate_templates)} candidate templates for {pair_key}.")
     
     # --- STAGE 2: CATEGORIZE THE FINAL, FILTERED TEMPLATES ---
     ## LOGIC: This is the key categorization from your BLAST script, now applied to Foldseek results.
@@ -348,112 +445,162 @@ def process_single_pair(p1_id, p2_id, dataset_name, fasta_sequences_dict, ires_d
         if e_val_1 > 1e-5 or e_val_2 > 1e-5 or pident_1 < 50 or pident_2 < 50:
             best_templates["condition_2"].append(template_data)
 
+    # --- STAGE 3: FOR EACH CONDITION, MAP TEMPLATE PAIRS TO QUERY COMPLEX ---
     for condition, templates in best_templates.items():
 
         if not templates:
+            logging.info(f"No templates found for {pair_key} under {condition}.")
             continue
 
-        # Sort templates for this specific condition by score
+        # Sort templates for this specific condition by score, and then select top template
         templates.sort(key = lambda x: x["score"], reverse = True)
-
         top_template = templates[0]
-        templates_with_mapping = []
-        logging.info(f"Processing {len(templates)} templates for {pair_key} under {condition}")
+        pdb_id = top_template['pdb_id']
+        
+        logging.info(f"Processing top template for {pair_key} under {condition}")
         align1, align2 = top_template['alignment_data']
         map1, map2 = get_mapped_binding_sites(align1), get_mapped_binding_sites(align2)
-        if not map1 or not map2:
-            logging.warning(f"Mapping failed for {template_data['template_pair']}. Skipping.")
-            continue
-
-        
-        SIZ, COV = 0, 0.0
-        pdb_id = top_template['pdb_id']
         structure = get_structure_from_file(pdb_id, LOCAL_PDB_DIR)
-
-        if structure:
-            # get ires data for this template from ires_df
-            ires_row_data = ires_df.loc[top_template['ires_row_index']]
-            _, template_chain_A = top_template['template_pair'][0].rsplit('_', 1)
-            _, template_chain_B = top_template['template_pair'][1].rsplit('_', 1)
-
-            # determine which column, PDBIResA, PDBIResB, corresponds to which chain
-            if ires_row_data['ChainA'] == template_chain_A:
-                ires_list_A = unzip_res_range(ires_row_data['PDBIresA'])
-                ires_list_B = unzip_res_range(ires_row_data['PDBIresB'])
-            else: # The chains are swapped in the ires file
-                ires_list_A = unzip_res_range(ires_row_data['PDBIresB'])
-                ires_list_B = unzip_res_range(ires_row_data['PDBIresA'])
-
-            chainA_obj, chainB_obj = structure[template_chain_A], structure[template_chain_B]
-
-            # create list of actual Bio.PDB.Residue objects from ires lists
-            residues_A = [chainA_obj[int(res_id)] for res_id in ires_list_A if res_id.isdigit() and int(res_id) in chainA_obj]
-            residues_B = [chainB_obj[int(res_id)] for res_id in ires_list_B if res_id.isdigit() and int(res_id) in chainB_obj]
-
-            # use NeighborSearch to find template IRes pairs
-            all_atoms_B = [atom for res in residues_B for atom in res.get_atoms() if atom.name == 'CA']
-            ns = NeighborSearch(all_atoms_B)
-
-            template_interacting_pairs = []
-            for res_a in residues_A:
-                if 'CA' in res_a:
-                    ca_a = res_a['CA']
-                    # find all CA atoms in chain B <=6.05A of this CA in chain A
-                    nearby_b_atoms = ns.search(ca_a.coord, 6.05, 'A')
-                    for atom_b in nearby_b_atoms:
-                        res_b = atom_b.get_parent()
-                        template_interacting_pairs.append((str(res_a.id[1]), str(res_b.id[1])))
-            n_template_pairs = len(template_interacting_pairs)
-
-            # < TODO >
-            mapped_query_pairs = []
-            for template_res_a, template_res_b in template_interacting_pairs:
-                query_pos_a = map1.get(template_res_a)
-                query_pos_b = map2.get(template_res_b)
-
-                if query_pos_a is not None and query_pos_b is not None:
-                    mapped_query_pairs.append((query_pos_a, query_pos_b))
-
-            seq_a = get_sequence_from_dict(p1_id, fasta_sequences_dict)
-            seq_b = get_sequence_from_dict(p2_id, fasta_sequences_dict)
-
-            if seq_a is None or seq_b is None:
-                logging.warning(f"Could not load sequence for {p1_id} or {p2_id}")
-                SIZ, COV = 0, 0.0
-            elif len(mapped_query_pairs) == 0:
-                logging.warning(f"No template pairs could be mapped to query for {pair_key}")
-                SIZ, COV = 0, 0.0
-            else:
-                # compute distances between query residues
-                surviving_pairs = []
-
-                query_structure_a = 0 # TODO
-                query_structure_b = 0 # TODO
-
-                
-
-        # Define a unique output file for this specific condition
-        output_file = os.path.join(out_dir, f"best_templates_{condition}_{dataset_name}_{pair_key}.jsonl")
-    
-        # Create the dictionary to dump
-        data_to_dump = {pair_key: templates_with_mapping}
+        if not map1 or not map2:
+            logging.warning(f"Mapping failed for {template_data['template_pair']}, or Structure not loaded. Skipping.")
+            continue
+        if not structure:
+            logging.warning(f"Structure for {pdb_id} not found in {LOCAL_PDB_DIR}. Attempting to download.")
+            download_pdb(pdb_id, LOCAL_PDB_DIR)
+            structure = get_structure_from_file(pdb_id, LOCAL_PDB_DIR)
         
-        with open(output_file, "w") as f:
-            json.dump(data_to_dump, f, indent = 4)
+        # get ires data for this template from ires_df
+        ires_row_data = ires_df.loc[top_template['ires_row_index']]
+        _, template_chain_A = top_template['template_pair'][0].rsplit('_', 1)
+        _, template_chain_B = top_template['template_pair'][1].rsplit('_', 1)
+
+        pair_data[condition] = {
+            "pdb_id": pdb_id, "chain_ids": f"{template_chain_A},{template_chain_B}", 
+            "fident": top_template['score'],
+            "pident": np.mean(top_template['pident']),
+            "e_value": np.mean(top_template['e_value']),
+            "SIZE": 0, "COV": 0.0
+        }
+
+        # determine which column, PDBIResA, PDBIResB, corresponds to which chain
+        if ires_row_data['ChainA'] == template_chain_A:
+            ires_list_A = unzip_res_range(ires_row_data['PDBIresA'])
+            ires_list_B = unzip_res_range(ires_row_data['PDBIresB'])
+        else: # The chains are swapped in the ires file
+            ires_list_A = unzip_res_range(ires_row_data['PDBIresB'])
+            ires_list_B = unzip_res_range(ires_row_data['PDBIresA'])
+
+        chainA_obj, chainB_obj = structure[template_chain_A], structure[template_chain_B]
+
+        # create list of actual Bio.PDB.Residue objects from ires lists
+        residues_A = [chainA_obj[int(res_id)] for res_id in ires_list_A if res_id.isdigit() and int(res_id) in chainA_obj]
+        residues_B = [chainB_obj[int(res_id)] for res_id in ires_list_B if res_id.isdigit() and int(res_id) in chainB_obj]
+
+        # use NeighborSearch to find template IRes pairs
+        all_atoms_B = [atom for res in residues_B for atom in res.get_atoms() if atom.name == 'CA']
+        ns = NeighborSearch(all_atoms_B)
+
+        template_interacting_pairs = []
+        for res_a in residues_A:
+            if 'CA' in res_a:
+                ca_a = res_a['CA']
+                # find all CA atoms in chain B <=6.05A of this CA in chain A
+                nearby_b_atoms = ns.search(ca_a.coord, 6.05, 'A')
+                for atom_b in nearby_b_atoms:
+                    res_b = atom_b.get_parent()
+                    template_interacting_pairs.append((str(res_a.id[1]), str(res_b.id[1])))
+        n_template_pairs = len(template_interacting_pairs)
+        if n_template_pairs == 0: 
+            logging.warning(f"No interacting residue pairs found for {pair_key} in template {pdb_id}.")
+            continue
+        
+        """ With template residue pairs identified, we must now map them onto the pertinent query complex.
+        """
+
+        # A. Mapping of template residue pairs to query residue pairs
+        mapped_query_pairs = []
+        for template_res_a, template_res_b in template_interacting_pairs:
+            query_pos_a = map1.get(template_res_a)
+            query_pos_b = map2.get(template_res_b)
+
+            if query_pos_a is not None and query_pos_b is not None:
+                mapped_query_pairs.append((query_pos_a, query_pos_b))
+        if not mapped_query_pairs:
+            logging.warning(f"No template pairs could be mapped for {pair_key}.")
+            continue
+        
+        # B. Extract unique active residues for each protein; 0-based indexing
+        # active_residues_a = sorted(list(set([pair[0] for pair in mapped_query_pairs])))
+        # active_residues_b = sorted(list(set([pair[1] for pair in mapped_query_pairs])))
+
+        # C. Import Query Structures (AFDB Generated Models)
+        query_specific_path_name = f"fold_{p1_id.lower()}_{p2_id.lower()}"
+        if query_specific_path_name not in os.listdir(AF3_MODELS_DIR):
+            logging.warning(f"AF3 models for {query_specific_path_name} not found.")
+            continue
+        af3_model_path = os.path.join(AF3_MODELS_DIR, query_specific_path_name)
+        cif_files = sorted([f for f in os.listdir(af3_model_path) if f.endswith('.cif')])
+        if not cif_files:
+            logging.warning(f"No .cif files found in {AF3_MODELS_DIR} for {query_specific_path_name}.")
+            continue
+        
+        # D. Load and process all constituent query structures
+        # Note: This assumes that the AF3 models are stored in a specific directory structure.
+        all_model_conserved_counts = []
+        for model_file in cif_files:
+            query_structure = get_structure_from_file(model_file[:-4], af3_model_path)
+            if query_structure is None or 'A' not in query_structure or 'B' not in query_structure:
+                logging.warning(f"Could not load or validate query structure {model_file} for {pair_key}.")
+                continue
+            
+            # Extract constituent chains A and B and their residues
+            residues_list_A, residues_list_B = list(query_structure['A'].get_residues()), list(query_structure['B'].get_residues())
+            
+            inter_ca_distances = []
+            for i1, i2 in mapped_query_pairs:
+                if i1 < len(residues_list_A) and i2 < len(residues_list_B):
+                    res1, res2 = residues_list_A[i1], residues_list_B[i2]
+                    if 'CA' in res1 and 'CA' in res2:
+                        inter_ca_distances.append(res1['CA'] - res2['CA'])
+            
+            # Tally # of pairs conserved
+            conserved_amount = sum(1 for d in inter_ca_distances if d <= 6.05)
+            all_model_conserved_counts.append(conserved_amount)
+            
+            # n_template_pairs
+        
+        # E. compute aggregate SIZE and COV metrics across the models
+        # - SIZE is defined as the number of conserved residue pairs
+        #   computed by averaing the number of conserved pairs across all models.
+        # - COV is defined as the fraction of conserved residue pairs
+        #   relative to the total number of template residue pairs
+        #   The initial count of template residue pairs is n_template_pairs, held constant.
+        pair_data[condition]['SIZE'] = np.mean(all_model_conserved_counts)
+        pair_data[condition]['COV'] = pair_data[condition]['SIZE'] / n_template_pairs if n_template_pairs > 0 else 0.0
+
+    return pair_data
 
 def main():
     """Main function to drive the pipeline"""
 
     parser = argparse.ArgumentParser(description = "Process a slice of a dataset using Foldseek results.")
-    parser.add_argument('--data_file', default = DATAFILE_PATH, help = "data file containing experimental protein pairs and all features.")
-    parser.add_argument('--task-id', required = True, type = int)
-    parser.add_argument('--total-tasks', required = True, type = int)
+    parser.add_argument('--ires_template_file', default = IRES_TEMPLATE_FILE, help = ".txt file containing 3D interfacial structures for TEMPLATE pairs.")
+    parser.add_argument('--ires_queryfile', default = IRES_QUERY_FILE, help = ".txt file containing 3D interfacial structures for QUERY pairs.")
+    parser.add_argument('--fasta_dir', default = FASTA_FILE_PATH, help = "path containing .FASTA files for query proteins.")
+    parser.add_argument('--tsv_dir', default = FOLDSEEK_TSV_DIR, help = "path containing .tsv formatted Foldseek results (homologs).")
+    parser.add_argument('--pdb_dir', default = LOCAL_PDB_DIR, help = "path containing 3D template PDB structures.")
+    parser.add_argument('--datafile_path', default = DATAFILE_PATH, help = "data file containing experimental protein pairs and all features.")
+    parser.add_argument('--scratch_path', default = BASE_SCRATCH_PATH, help = "scratch path directory.")
+    parser.add_argument('--json_output_path', default = BASE_OUTPUT_JSONL_PATH, help = "specify output path of .jsonl files containing structural features.")
+    parser.add_argument('--task-id', default = 0, type = int)
+    parser.add_argument('--total-tasks', default = 1, type = int)
     args = parser.parse_args()
 
     # Load shared resources
-    fasta_sequences_dict = load_fasta_sequences(FASTA_FILE_PATH)
-    ires_df = pd.read_csv(IRES_FILE, sep = "\t")
-    data = pd.read_csv(DATAFILE_PATH)
+    fasta_sequences_dict = load_fasta_sequences(args.fasta_dir)
+    ires_template_df = pd.read_csv(args.ires_template_file, sep = "\t")\
+        .dropna(subset = ['UniProtA', 'UniProtB', 'ChainA', 'ChainB'])
+    data = pd.read_csv(args.datafile_path)
 
     # Read and partition the pair list
     all_pairs = [tuple(ppi_string.split(':')) for ppi_string in data['ppi'].dropna() if len(ppi_string.split(':')) == 2]
@@ -467,20 +614,17 @@ def main():
     
     logging.info(f"Task {args.task_id}: Processing {len(my_slice_of_pairs)} pairs from index {start_index} to {end_index-1}")
 
-    output_dir = os.path.join(BASE_OUTPUT_JSONL_PATH, args.dataset)
-    os.makedirs(output_dir, exist_ok=True)
+    # output_dir = os.path.join(args.json_output_path, args.dataset)
+    os.makedirs(args.json_output_path, exist_ok = True)
     
     # Process each pair in the assigned slice
-    for pair_idx, (p1, p2) in enumerate(my_slice_of_pairs):
-        process_single_pair(
-            p1, p2, args.dataset, fasta_sequences_dict, ires_df, pair_idx,
-            out_dir = output_dir, chunk_id = f"task_{args.task_id}"
-        )
+    for index, (p1, p2) in enumerate(my_slice_of_pairs):
+        pair_data = process_single_pair(p1, p2, ires_template_df, index + 1)
+        with open(os.path.join(args.json_output_path, f"{p1}_{p2}.json"), "w") as f:
+            json.dump(pair_data, f, indent = 4)
+        print("-"*60)
+        # logging.info(f"Processed pair {pair_idx + 1}/{len(my_slice_of_pairs)}: {p1} - {p2}")
+    logging.info(f"Task {args.task_id} completed. Processed {len(my_slice_of_pairs)} pairs.")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
