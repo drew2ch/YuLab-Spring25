@@ -11,6 +11,7 @@ from Bio.Blast.Applications import NcbiblastpCommandline
 from Bio.PDB import PDBParser, MMCIFParser, NeighborSearch
 import re
 import os
+import glob
 import numpy as np
 import pandas as pd
 import json
@@ -232,9 +233,17 @@ def get_mapped_binding_sites(
 
     # Get structure model from local .cif or .pdb files
     t_protein_model = get_structure_from_file(pdb, pdb_dir)
-    if t_protein_model is None or \
-            chain not in t_protein_model:
-        logging.warning(f"Could not get chain '{chain}' for PDB '{pdb}' from local files.")
+    
+    if t_protein_model is None:
+        logging.warning(f"Structure for {pdb} not found in {pdb_dir}. Attempting to download...")
+        download_pdb(pdb, LOCAL_PDB_DIR)
+        t_protein_model = get_structure_from_file(pdb, LOCAL_PDB_DIR)
+        if t_protein_model is None:
+            logging.error(f"Failed to load structure for {pdb} even after downloading.")
+            return {}
+    
+    if chain not in t_protein_model:
+        logging.error(f"Chain '{chain}' not found in PDB structure {pdb}.")
         return {}
     
     t_chain = t_protein_model[chain]
@@ -515,15 +524,11 @@ def process_single_pair(p1_id, p2_id):
     map1, map2 = get_mapped_binding_sites(align1), get_mapped_binding_sites(align2)
     structure = get_structure_from_file(pdb_id, LOCAL_PDB_DIR)
     if not map1 or not map2:
-        logging.warning(f"Mapping failed for {top_template['template_pair']}, or Structure not loaded. Skipping.")
+        logging.warning(f"Mapping failed for {top_template['template_pair']}. Skipping.")
         return pair_data
     if not structure:
-        logging.warning(f"Structure for {pdb_id} not found in {LOCAL_PDB_DIR}. Attempting to download.")
-        download_pdb(pdb_id, LOCAL_PDB_DIR)
-        structure = get_structure_from_file(pdb_id, LOCAL_PDB_DIR)
-        if not structure:
-            logging.error(f"Failed to load structure for {pdb_id}")
-            return pair_data
+        logging.error(f"Failed to load structure for {pdb_id}")
+        return pair_data
     
     # get ires data for this template from ires_df
     ires_row_data = IRES_TEMPLATE_DATA.loc[top_template['ires_row_index']]
@@ -607,27 +612,33 @@ def process_single_pair(p1_id, p2_id):
     # active_residues_b = sorted(list(set([pair[1] for pair in mapped_query_pairs])))
 
     # C. Import Query Structures (AFDB Generated Models)
-    query_specific_path_name = f"fold_{p1_id.lower()}_{p2_id.lower()}"
-    af3_models_path = Path(AF3_MODELS_DIR)
-        
+    query_specific_path = os.path.join(AF3_MODELS_DIR, f"fold_{p1_id.lower()}_{p2_id.lower()}")
+    if not os.path.isdir(query_specific_path):
+        logging.warning(f"Path for pair {p1_id.lower()}_{p2_id.lower()} does not exist in AF3 directory.")
+        return pair_data
     try:
-        cif_files = sorted(af3_models_path.glob(f"{query_specific_path_name}_model_*.cif"))
+        cif_files = glob.glob(os.path.join(query_specific_path, "*.cif"))
         if not cif_files:
-            logging.warning(f"No .cif files found in {af3_models_path}")
+            logging.warning(f"No .cif files found in {query_specific_path}.")
             return pair_data
     except Exception as e:
-        logging.warning(f"Unable to find .cif files in {af3_models_path}")
+        logging.error(f"Error while searching for .cif files in {query_specific_path}.")
         return pair_data
-    
-    logging.debug(f"Processing top AF3 models for {pair_key}...")
+    logging.info(f"Processing top AF3 models for {pair_key}...")
     
     # D. Load and process the top query structure.
     # Note: This assumes that the AF3 models are stored in a specific directory structure.
+    cif_files.sort()
     top_model_file = cif_files[0]
+    # --- FIX: Use os.path to split the path string ---
+    parent_dir = os.path.dirname(top_model_file)
+    filename = os.path.basename(top_model_file)
+    model_stem, _ = os.path.splitext(filename) # Splits 'model.cif' into ('model', '.cif')
+    
     try:
-        query_structure = get_structure_from_file(top_model_file.stem, top_model_file.parent)
+        query_structure = get_structure_from_file(model_stem, parent_dir)
         if not query_structure:
-            logging.warning(f"Failed to load query structure {top_model_file.name}")
+            logging.warning(f"Failed to load query structure {filename}")
             return pair_data
             
         if 'A' not in query_structure or 'B' not in query_structure:
@@ -664,9 +675,8 @@ def process_single_pair(p1_id, p2_id):
         logging.error(f"Error processing model for {pair_key}: {e}")
         return pair_data
     
-    # E. compute aggregate SIZE and COV metrics across the models
+    # E. compute SIZE and COV metrics across the models
     # - SIZE is defined as the number of conserved residue pairs
-    #   computed by averaing the number of conserved pairs across all models.
     # - COV is defined as the fraction of conserved residue pairs
     #   relative to the total number of template residue pairs
     #   The initial count of template residue pairs is n_template_pairs, held constant.
