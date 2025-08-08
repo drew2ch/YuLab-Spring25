@@ -612,23 +612,19 @@ def process_single_pair(p1_id, p2_id):
     # active_residues_b = sorted(list(set([pair[1] for pair in mapped_query_pairs])))
 
     # C. Import Query Structures (AFDB Generated Models)
-    query_specific_path = os.path.join(AF3_MODELS_DIR, f"fold_{p1_id.lower()}_{p2_id.lower()}")
-    if not os.path.isdir(query_specific_path):
-        logging.warning(f"Path for pair {p1_id.lower()}_{p2_id.lower()} does not exist in AF3 directory.")
+    query_specific_file = f"fold_{p1_id.lower()}_{p2_id.lower()}_model_0.cif"
+    logging.info(f"Recursively searching for {query_specific_file}...")
+    
+    search_pattern = os.path.join(AF3_MODELS_DIR, '**', query_specific_file)
+    cif_files = glob.glob(search_pattern, recursive = True)
+    if not cif_files:
+        logging.warning(f"File {query_specific_file} not found in {AF3_MODELS_DIR}.")
         return pair_data
-    try:
-        cif_files = glob.glob(os.path.join(query_specific_path, "*.cif"))
-        if not cif_files:
-            logging.warning(f"No .cif files found in {query_specific_path}.")
-            return pair_data
-    except Exception as e:
-        logging.error(f"Error while searching for .cif files in {query_specific_path}.")
-        return pair_data
-    logging.info(f"Processing top AF3 models for {pair_key}...")
+    logging.info(f"Found evidence of AF3 Model {query_specific_file}.")
     
     # D. Load and process the top query structure.
-    # Note: This assumes that the AF3 models are stored in a specific directory structure.
-    cif_files.sort()
+    # Note: This assumes that the AF3 model are stored in a specific directory structure.
+    # cif_files.sort()
     top_model_file = cif_files[0]
     # --- FIX: Use os.path to split the path string ---
     parent_dir = os.path.dirname(top_model_file)
