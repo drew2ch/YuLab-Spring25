@@ -6,7 +6,10 @@
 --- Classifier 4: Genomic + has_templates, fident, pident
 --- Classifier 5: Genomic + has_templates, fident, pident, e-value
 --- Classifier 6: Genomic + has_templates, fident, pident, e-value, SIZE/COV
-=== Andrew Chung, hc893; Optimized on 8/7/2025 ===
+--- Classifier 7: Genomic + has_templates, fident, pident, SIZE/COV
+--- Classifier 8: Genomic + has_templates, fident, SIZE/COV,
+--- Classifier 9: Genomic + has_templates, pident, SIZE/COV
+=== Andrew Chung, hc893; Optimized on 8/7/2025, Updated 8/8/2025 ===
 """
 
 import warnings
@@ -55,6 +58,14 @@ extended_colors = [
     "#505A9C",  # navy
     "#F4A582",  # warm peach
     "#D96F9C",  # soft magenta
+    "#F7E1A1",  # soft yellow
+    "#E8A978",  # apricot
+    "#C37B89",  # dusty rose
+    "#9CBFA7",  # sage green
+    "#4E8E89",  # darker teal
+    "#82628C",  # muted plum
+    "#A9907E",  # taupe
+    "#8D99AE"   # slate grey
 ]
 plt.style.use('bmh')
 plt.rcParams.update({
@@ -79,9 +90,9 @@ plt.rcParams.update({
     'lines.markersize': 6,
 
     # fonts
-    'font.family': 'serif',
-    'font.serif': ['Palatino Linotype'],
-    'font.size': 12,
+    # 'font.family': 'serif',
+    # 'font.serif': ['Palatino Linotype'],
+    # 'font.size': 12,
 
     # ticks
     'xtick.color': '0.2',
@@ -478,7 +489,10 @@ def main():
         'RF: Genomic + HT/pident': genomic_features + ['has_templates', 'pident'],
         'RF: Genomic + HT/fident/pident': genomic_features + ['has_templates', 'fident', 'pident'],
         'RF: Genomic + HT/fident/pident/e-value': genomic_features + ['has_templates', 'fident', 'pident', 'evalue'],
-        'RF: Genomic + HT/fident/pident/SIZE-COV': genomic_features + ['has_templates', 'fident', 'pident', 'evalue', 'SIZE', 'COV']
+        'RF: Genomic + HT/fident/pident/e-value/SIZE-COV': genomic_features + ['has_templates', 'fident', 'pident', 'evalue', 'SIZE', 'COV'],
+        'RF: Genomic + HT/fident/pident/SIZE-COV': genomic_features + ['has_templates', 'fident', 'pident', 'SIZE', 'COV'],
+        'RF: Genomic + HT/fident/SIZE-COV': genomic_features + ['has_templates', 'fident', 'SIZE', 'COV'],
+        'RF: Genomic + HT/pident/SIZE-COV': genomic_features + ['has_templates', 'pident', 'SIZE', 'COV']
     }
 
     """ Part 1: Full Raw Data File (P:N Ratio 1:4.5). Use all existing PPI pairs to train RFC.
@@ -527,9 +541,9 @@ def main():
     print(f"\n{'='*60}")
     logging.info(f"Part 1: All classifiers have been trained/evaluated. Saving figures...")
     try:
-        plt.savefig('foldseek_classifiers_fulldata.png', bbox_inches = 'tight', dpi = 300)
+        plt.savefig(os.path.join(args.output_path, 'foldseek_classifiers_fulldata_aug8.png'), bbox_inches = 'tight', dpi = 300)
         plt.close()
-        logging.info("Plots saved as 'foldseek_classifiers_fulldata.png'.")
+        logging.info("Plots saved as 'foldseek_classifiers_fulldata_aug8.png'.")
     except Exception as e:
         logging.error(f"Error saving plots: {e}")
         return
@@ -617,9 +631,9 @@ def main():
     print(f"\n{'='*60}")
     logging.info(f"All classifiers have been trained/evaluated. Saving figures...")
     try:
-        plt.savefig('foldseek_classifiers_ratio.png', bbox_inches = 'tight', dpi = 300)
+        plt.savefig(os.path.join(args.output_path, 'foldseek_classifiers_ratio_aug8.png'), bbox_inches = 'tight', dpi = 300)
         plt.close()
-        logging.info("Plots saved as 'foldseek_classifiers_ratio.png'.")
+        logging.info("Plots saved as 'foldseek_classifiers_ratio_aug8.png'.")
     except Exception as e:
         logging.error(f"Error saving plots: {e}")
         return
