@@ -1,15 +1,5 @@
 """ Training Random Forest Classifier Algorithm on PPI feature space with Foldseek-integrated features.
---- Classifier 0: PrePPI (Total score)
---- Classifier 1: Genomic (coexp, BP, CC, MF)
---- Classifier 2: Genomic + has_templates, fident
---- Classifier 3: Genomic + has_templates, pident
---- Classifier 4: Genomic + has_templates, fident, pident
---- Classifier 5: Genomic + has_templates, fident, pident, e-value
---- Classifier 6: Genomic + has_templates, fident, pident, e-value, SIZE/COV
---- Classifier 7: Genomic + has_templates, fident, pident, SIZE/COV
---- Classifier 8: Genomic + has_templates, fident, SIZE/COV,
---- Classifier 9: Genomic + has_templates, pident, SIZE/COV
-=== Andrew Chung, hc893; Optimized on 8/7/2025, Updated 8/8/2025 ===
+    Andrew Chung, hc893; Optimized on 8/7/2025, Updated 8/8/2025
 """
 
 import warnings
@@ -30,6 +20,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     roc_auc_score, roc_curve, precision_recall_curve, average_precision_score
 )
+from xgboost import XGBClassifier
 
 sys.path.append(os.path.abspath(os.path.join(
     os.path.dirname(__file__), '..'))
@@ -40,7 +31,7 @@ DEFAULT_USER_BASE_DIR = "/home/hc893"
 DEFAULT_DATA_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "data/features.csv")
 DEFAULT_TEMPLATES_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "data/template-data")
 DEFAULT_OUTPUT_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "projects/ppi-classifiers/figures/")
-RANDOM_STATE = np.random.RandomState(893)
+RANDOM_STATE = 893
 
 # Configure logging
 logging.basicConfig(
@@ -188,7 +179,7 @@ def compute_metrics(y_test, y_prob) -> dict:
         'roc_auc': roc_auc, 'pr_auc': ap_score, 'ap_score': ap_score
     }
 
-def train_rf(X_train, y_train, X_test, y_test, n_estimators: int = 500, random_state = RANDOM_STATE) -> dict:
+def train_rfc(X_train, y_train, X_test, y_test, n_estimators: int = 500, random_state = RANDOM_STATE):
     """ Train a Random Forest Classifier on the train data and return 
         a structured output of classification metrics (see above) as a dict object.
         A helper function, compute_metrics(), is defined above to calculate aforementioned metrics.
@@ -201,6 +192,21 @@ def train_rf(X_train, y_train, X_test, y_test, n_estimators: int = 500, random_s
     )
     rfc.fit(X_train, y_train)
     y_prob = rfc.predict_proba(X_test)[:, 1]
+    return compute_metrics(y_test, y_prob), y_prob
+
+def train_xgb(X_train, y_train, X_test, y_test, n_estimators: int = 500, scale_pos_weight: float = 1.0, random_state = RANDOM_STATE):
+    """ Train an XGBoost Classifier on the train data and return 
+        a structured output of classification metrics (see above) as a dict object.
+        A helper function, compute_metrics(), is defined above to calculate aforementioned metrics.
+    """
+
+    xgb = XGBClassifier(
+        n_estimators = n_estimators, learning_rate = 0.1, random_state = random_state,
+        max_depth = 5, subsample = 0.8, colsample_bytree = 0.8, scale_pos_weight = scale_pos_weight,
+        objective = 'binary:logistic', eval_metric = 'logloss'
+    )
+    xgb.fit(X_train, y_train)
+    y_prob = xgb.predict_proba(X_test)[:, 1]
     return compute_metrics(y_test, y_prob), y_prob
 
 def plot_roc_pr(
@@ -481,18 +487,42 @@ def main():
     print(f"Overall Baseline precision: {total_pos/(total_pos + total_neg):.4f}" if (total_pos + total_neg) > 0 else "N/A")
     # input("Press Enter to continue...")
 
+    """ Define feature space of all classifiers. 
+    --- Classifier 0: PrePPI (Total score)
+    --- Classifier 1: Genomic (coexp, BP, CC, MF)
+    --- Classifier 2: Genomic + HT, fident
+    --- Classifier 3: Genomic + HT, pident
+    *** Classifier 4: Genomic + HT, fident, pident
+    *** Classifier 5: Genomic + HT, fident, pident, e-value
+    --- Classifier 6: Genomic + HT, fident, pident, e-value, SIZE/COV
+    *** Classifier 7: Genomic + HT, fident, pident, SIZE/COV
+    --- Classifier 8: Genomic + HT, fident, SIZE/COV
+    --- Classifier 9: Genomic + HT, pident, SIZE/COV
+    --- Classifier 10: Genomic + HT, SIZE/COV
+
+    ### PILOT: XGBoost-based classifiers for promising feature sets.
+    --- Classifier A: Genomic + HT, fident/pident
+    --- Classifier B: Genomic + HT, SIZE/COV
+    """
+    
     genomic_features = ['co-expression', 'BP', 'CC', 'MF']
+    preppi_features = ['SIZE', 'COV']
     feature_sets = {
         'PrePPI -- total': ['Total'],
         'RF: Genomic': genomic_features,
         'RF: Genomic + HT/fident': genomic_features + ['has_templates', 'fident'],
         'RF: Genomic + HT/pident': genomic_features + ['has_templates', 'pident'],
-        'RF: Genomic + HT/fident/pident': genomic_features + ['has_templates', 'fident', 'pident'],
-        'RF: Genomic + HT/fident/pident/e-value': genomic_features + ['has_templates', 'fident', 'pident', 'evalue'],
-        'RF: Genomic + HT/fident/pident/e-value/SIZE-COV': genomic_features + ['has_templates', 'fident', 'pident', 'evalue', 'SIZE', 'COV'],
-        'RF: Genomic + HT/fident/pident/SIZE-COV': genomic_features + ['has_templates', 'fident', 'pident', 'SIZE', 'COV'],
-        'RF: Genomic + HT/fident/SIZE-COV': genomic_features + ['has_templates', 'fident', 'SIZE', 'COV'],
-        'RF: Genomic + HT/pident/SIZE-COV': genomic_features + ['has_templates', 'pident', 'SIZE', 'COV']
+        # 'RF: Genomic + HT/fident/pident': genomic_features + ['has_templates', 'fident', 'pident'],
+        # 'RF: Genomic + HT/fident/pident/e-value': genomic_features + ['has_templates', 'fident', 'pident', 'evalue'],
+        'RF: Genomic + HT/fident/pident/e-value/SIZE-COV': genomic_features + ['has_templates', 'fident', 'pident', 'evalue'] + preppi_features,
+        # 'RF: Genomic + HT/fident/pident/SIZE-COV': genomic_features + ['has_templates', 'fident', 'pident'] + preppi_features,
+        'RF: Genomic + HT/fident/SIZE-COV': genomic_features + ['has_templates', 'fident'] + preppi_features,
+        'RF: Genomic + HT/pident/SIZE-COV': genomic_features + ['has_templates', 'pident'] + preppi_features,
+        'RF: Genomic + HT/SIZE-COV': genomic_features + ['has_templates'] + preppi_features,
+
+        ### New (tentative) XGBoost classifiers (8/9/2025)
+        'XGB: Genomic + HT/fident': genomic_features + ['has_templates', 'fident'],
+        'XGB: Genomic + HT/SIZE-COV': genomic_features + ['has_templates'] + preppi_features
     }
 
     """ Part 1: Full Raw Data File (P:N Ratio 1:4.5). Use all existing PPI pairs to train RFC.
@@ -522,8 +552,11 @@ def main():
         if clf_id == 'PrePPI -- total':
             y_prob = X_test[features].squeeze()
             RESULTS = compute_metrics(y_test, y_prob)
+        elif clf_id.split(':')[0] == 'XGB':
+            spw = np.sum(y_train == 0) / np.sum(y_train == 1)
+            RESULTS, y_prob = train_xgb(X_train[features], y_train, X_test[features], y_test, scale_pos_weight = spw)
         else:
-            RESULTS, y_prob = train_rf(X_train[features], y_train, X_test[features], y_test)
+            RESULTS, y_prob = train_rfc(X_train[features], y_train, X_test[features], y_test)
 
         print(f"Model training complete for classifier {clf_id}.")
         analyze_predictions(
@@ -541,9 +574,9 @@ def main():
     print(f"\n{'='*60}")
     logging.info(f"Part 1: All classifiers have been trained/evaluated. Saving figures...")
     try:
-        plt.savefig(os.path.join(args.output_path, 'foldseek_classifiers_fulldata_aug8.png'), bbox_inches = 'tight', dpi = 300)
+        plt.savefig(os.path.join(args.output_path, 'foldseek_classifiers_fulldata_aug9.png'), bbox_inches = 'tight', dpi = 300)
         plt.close()
-        logging.info("Plots saved as 'foldseek_classifiers_fulldata_aug8.png'.")
+        logging.info("Plots saved as 'foldseek_classifiers_fulldata_aug9.png'.")
     except Exception as e:
         logging.error(f"Error saving plots: {e}")
         return
@@ -572,18 +605,29 @@ def main():
     
     # train each RFC on the balanced training set
     # need to store trained RFC objects for test set evaluation
-    rfc_models = {}
+    clf_models = {}
     for clf_id, features in feature_sets.items(): # omit PrePPI (not RF)
         
         assert all(feature in X_train_bal.columns for feature in features), \
             logging.error(f"Error: One or more features {features} not found in data columns.")
         if clf_id != 'PrePPI -- total':
             print(f"Training Classifier {clf_id} with balanced 1:1 train set...")
-            rfc = RandomForestClassifier(
-                n_estimators = 500, oob_score = True, random_state = RANDOM_STATE
-            )
-            rfc.fit(X_train_bal[features], y_train_bal)
-            rfc_models[clf_id] = rfc
+            if clf_id.split(':')[0] == 'RF':
+                rfc = RandomForestClassifier(
+                    n_estimators = 500, oob_score = True, random_state = RANDOM_STATE
+                )
+                rfc.fit(X_train_bal[features], y_train_bal)
+                clf_models[clf_id] = rfc
+            elif clf_id.split(':')[0] == 'XGB':
+                xgb = XGBClassifier(
+                    n_estimators = 500, learning_rate = 0.1, random_state = RANDOM_STATE,
+                    max_depth = 5, subsample = 0.8, colsample_bytree = 0.8, scale_pos_weight = 1,
+                    objective = 'binary:logistic', eval_metric = 'logloss'
+                )
+                xgb.fit(X_train_bal[features], y_train_bal)
+                clf_models[clf_id] = xgb
+            else:
+                logging.error(f"Error: Unknown Classifier ID detected: {clf_id}")
     print("All classifiers trained on balanced 1:1 training set.")
 
     """ Now, systematically create test sets with varying class ratios.
@@ -610,7 +654,7 @@ def main():
                 y_prob = X_test_ratio[features].squeeze()
                 RESULTS = compute_metrics(y_test_ratio, y_prob)
             else:
-                clf = rfc_models[clf_id]
+                clf = clf_models[clf_id]
                 y_prob = clf.predict_proba(X_test_ratio[features])[:, 1]
                 RESULTS = compute_metrics(y_test_ratio, y_prob)
             
@@ -631,14 +675,14 @@ def main():
     print(f"\n{'='*60}")
     logging.info(f"All classifiers have been trained/evaluated. Saving figures...")
     try:
-        plt.savefig(os.path.join(args.output_path, 'foldseek_classifiers_ratio_aug8.png'), bbox_inches = 'tight', dpi = 300)
+        plt.savefig(os.path.join(args.output_path, 'foldseek_classifiers_ratio_aug9.png'), bbox_inches = 'tight', dpi = 300)
         plt.close()
-        logging.info("Plots saved as 'foldseek_classifiers_ratio_aug8.png'.")
+        logging.info("Plots saved as 'foldseek_classifiers_ratio_aug9.png'.")
     except Exception as e:
         logging.error(f"Error saving plots: {e}")
         return
     
-    logging.info(f"Job Finished. \n{'='*60}")
+    logging.info(f"Job Finished.")
 
 if __name__ == "__main__":
     main()
