@@ -1,5 +1,7 @@
 """ Script to generate SIZ/COV features as defined by the PrePPI interaction classifier model.
     Incorporates Juheon Chu's code plus custom machine-level modifications by Andrew Chung.
+--- Run 1: 8/1/2025 -- full comprehensive run for initial Genomic/PrePPI intersection pairs
+--- Run 2: 8/21/2025 -- augmentative run to accommodate expanded training set
 """
 
 import tempfile
@@ -241,6 +243,8 @@ def get_mapped_binding_sites(
         if t_protein_model is None:
             logging.error(f"Failed to load structure for {pdb} even after downloading.")
             return {}
+        else:
+            logging.info(f"Successfully downloaded and loaded structure for {pdb}.")
     
     if chain not in t_protein_model:
         logging.error(f"Chain '{chain}' not found in PDB structure {pdb}.")
