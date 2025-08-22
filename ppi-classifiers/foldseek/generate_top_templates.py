@@ -4,6 +4,8 @@
 --- Run 2: 8/21/2025 -- augmentative run to accommodate expanded training set
 """
 
+import gzip
+import tarfile
 import tempfile
 import urllib.request
 
@@ -38,6 +40,8 @@ DATA_BASE_DIR = "F:/Research/ppi-cdata" # utilizing external drive for data stor
 IRES_TEMPLATE_FILE = os.path.join(DATA_BASE_DIR, "ires_perpdb_alltax.txt")
 # IRES_QUERY_FILE = os.path.join(DATA_BASE_DIR, "ires_all.txt")
 # FASTA_FILE_PATH = os.path.join(DATA_BASE_DIR, "uniprot_seqs_both_sets.txt")
+YU_PDB_DIR = "/share/yu/resources/pdb/"
+YU_PDB_BUNDLE_DIR = "/share/yu/resources/pdb_like/"
 LOCAL_PDB_DIR = os.path.join(DATA_BASE_DIR, "pdb-templates/")
 FOLDSEEK_TSV_DIR = os.path.join(DATA_BASE_DIR, "foldseek-homologs/")
 AF3_MODELS_DIR = os.path.join(DATA_BASE_DIR, "af3-models/")
@@ -103,6 +107,69 @@ def get_structure_from_file(pdb_id, pdb_dir):
     logging.warning(f"Query structure not found for {pdb_id} in {pdb_dir}.")
     return None
 
+def get_structure_from_archive(pdb_id, archive_path):
+    """ Loads .cif/.pdb structure (template) from a .ent.gz file. Adapted in concordance with .tar.gz based database."""
+    pdb_id_lower = pdb_id.lower()
+    subdir = pdb_id_lower[1:3] # middle 2 characters of PDB ID
+    filename = f"pdb{pdb_id_lower}.ent.gz"
+    filepath = os.path.join(archive_path, subdir, filename)
+    if not os.path.exists(filepath):
+        logging.warning(f"Structure file {filepath} not found.")
+        return None
+    
+    try:
+        with gzip.open(filepath, 'rt') as structure_handle:
+            # --- Tier 1: Try parsing as a modern mmCIF file first ---
+            try:
+                parser = MMCIFParser(QUIET = True)
+                structure = parser.get_structure(pdb_id, structure_handle)[0]
+                return structure
+            except Exception as e:
+                logging.warning(f"Could not parse {filepath} as mmCIF ({e}). Attempting legacy PDB format...")
+                # CRITICAL: Rewind the file handle to the beginning for the next parser.
+                structure_handle.seek(0)
+                
+                # --- Tier 2: If mmCIF fails, try parsing as a legacy PDB file ---
+                try:
+                    parser = PDBParser(QUIET = True)
+                    structure = parser.get_structure(pdb_id, structure_handle)[0]
+                    logging.info(f"Successfully parsed {filepath} as legacy PDB format.")
+                    return structure
+                except Exception as final_e:
+                    logging.error(f"Failed to parse {filepath} as either mmCIF or PDB format. Final error: {final_e}")
+                    return None
+    except Exception as e:
+        logging.error(f"Error reading structure from {filepath}: {e}")
+        return None
+    
+def get_structure_from_bundle(pdb_id, bundle_base_dir):
+    """ Loads .cif/.pdb structure (template) from a .tar.gz file. Adapted in concordance with .tar.gz based database."""
+    pdb_id_lower = pdb_id.lower()
+    subdir = pdb_id_lower[1:3] # middle 2 characters of PDB ID
+    filename = f"{pdb_id_lower}-pdb-bundle.tar.gz"
+    filepath = os.path.join(bundle_base_dir, subdir, filename)
+    if not os.path.exists(filepath):
+        logging.warning(f"Structure file {filepath} not found.")
+        return None
+    
+    try:
+        with tarfile.open(filepath, 'r:gz') as tar:
+            # --- Tier 1: Try parsing as a modern mmCIF file first ---
+            cif_member_name = f"{pdb_id_lower}.cif"
+            try:
+                cif_file_handle = tar.extractfile(cif_member_name)
+                if cif_file_handle:
+                    parser = MMCIFParser(QUIET = True)
+                    structure = parser.get_structure(pdb_id, cif_file_handle)[0]
+                    cif_file_handle.close()
+                    return structure
+            except KeyError:
+                logging.warning(f"Member file '{cif_member_name}' not found in bundle {filepath}.")
+                return None
+    except Exception as e:
+        logging.error(f"Error reading structure from {filepath}: {e}")
+        return None
+    
 def read_cif(structure):
     """ Read a .cif file and return a data structure containing all chains.
     --- For the express purpose of computing inter-Ca distances, the pLDDT module won't be necessary.
@@ -219,9 +286,10 @@ def download_pdb(pdbcode, datadir, downloadurl = "https://files.rcsb.org/downloa
 
 def get_mapped_binding_sites(
         alignment: dict, # foldseek alignment data (query, target, ...)
-        pdb_dir: str = LOCAL_PDB_DIR # path saving template PDB files
+        t_protein_model: object # pre-loaded Bio.PDB structure object for the template
     ) -> dict[str, int]:
     # Map binding sites from template to query by aligning query to PDB-extracted sequence using Foldseek.
+    # 8/21/2025: updated in concordance with .ent.gz data format adaptation.
 
     # Verify that the alignment contains all required keys
     required_keys = ['target', 'qaln', 'taln', 'qstart', 'tstart']
@@ -232,19 +300,6 @@ def get_mapped_binding_sites(
     # Extract PDB ID and chain from the Foldseek hit
     pdb, chain = alignment["target"].split("_")
     pdb = pdb.split('-')[0].lower()  # Standard PDB ID in lowercase
-
-    # Get structure model from local .cif or .pdb files
-    t_protein_model = get_structure_from_file(pdb, pdb_dir)
-    
-    if t_protein_model is None:
-        logging.warning(f"Structure for {pdb} not found in {pdb_dir}. Attempting to download...")
-        download_pdb(pdb, LOCAL_PDB_DIR)
-        t_protein_model = get_structure_from_file(pdb, LOCAL_PDB_DIR)
-        if t_protein_model is None:
-            logging.error(f"Failed to load structure for {pdb} even after downloading.")
-            return {}
-        else:
-            logging.info(f"Successfully downloaded and loaded structure for {pdb}.")
     
     if chain not in t_protein_model:
         logging.error(f"Chain '{chain}' not found in PDB structure {pdb}.")
@@ -525,13 +580,31 @@ def process_single_pair(p1_id, p2_id):
     
     logging.info(f"Processing top template for {pair_key}.")
     align1, align2 = top_template['alignment_data']
-    map1, map2 = get_mapped_binding_sites(align1), get_mapped_binding_sites(align2)
-    structure = get_structure_from_file(pdb_id, LOCAL_PDB_DIR)
+
+    # --- Centralized Structure Loading ---
+    # a. load from main Yu Lab PDB mirror first
+    structure = get_structure_from_archive(pdb_id, YU_PDB_DIR)
+    # b. if not found, try the Yu Lab PDB_like mirror
+    if not structure:
+        structure = get_structure_from_bundle(pdb_id, YU_PDB_BUNDLE_DIR)
+    # c. if still not found, try the download cache
+    if not structure:
+        structure = get_structure_from_file(pdb_id, LOCAL_PDB_DIR)
+    # d. if all local sources fail, download from RCSB PDB
+    if not structure:
+        logging.warning(f"Structure {pdb_id} not found in local cache. Attempting to download.")
+        download_pdb(pdb_id, LOCAL_PDB_DIR)
+        structure = get_structure_from_file(pdb_id, LOCAL_PDB_DIR)
+    # e. if all attempts fail, log error and skip
+    if not structure:
+        logging.error(f"Failed to load structure for {pdb_id} after all attempts.")
+        return pair_data
+    else:
+        logging.info(f"Structure for {pdb_id} was successfully procured.")
+    
+    map1, map2 = get_mapped_binding_sites(align1, structure), get_mapped_binding_sites(align2, structure)
     if not map1 or not map2:
         logging.warning(f"Mapping failed for {top_template['template_pair']}. Skipping.")
-        return pair_data
-    if not structure:
-        logging.error(f"Failed to load structure for {pdb_id}")
         return pair_data
     
     # get ires data for this template from ires_df
@@ -694,7 +767,7 @@ def main():
     # parser.add_argument('--ires_query_file', default = IRES_QUERY_FILE, help = ".txt file containing 3D interfacial structures for QUERY pairs.")
     # parser.add_argument('--fasta_dir', default = FASTA_FILE_PATH, help = "path containing .FASTA files for query proteins.")
     parser.add_argument('--tsv_dir', default = FOLDSEEK_TSV_DIR, help = "path containing .tsv formatted Foldseek results (homologs).")
-    parser.add_argument('--pdb_dir', default = LOCAL_PDB_DIR, help = "path containing 3D template PDB structures.")
+    parser.add_argument('--pdb_dir', default = LOCAL_PDB_DIR, help = "local path storing 3D template PDB structures.")
     parser.add_argument('--datafile_path', default = DATAFILE_PATH, help = "data file containing experimental protein pairs and all features.")
     parser.add_argument('--scratch_path', default = BASE_SCRATCH_PATH, help = "scratch path directory.")
     parser.add_argument('--json_output_path', default = BASE_OUTPUT_JSONL_PATH, help = "specify output path of .jsonl files containing structural features.")
