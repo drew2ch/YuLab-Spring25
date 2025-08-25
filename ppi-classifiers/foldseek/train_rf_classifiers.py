@@ -87,8 +87,8 @@ plt.rcParams.update({
     'lines.markersize': 6,
 
     # fonts
-    # 'font.family': 'serif',
-    # 'font.serif': ['Palatino Linotype'],
+    # 'font.family': 'sans-serif',
+    # 'font.serif': ['Calibri'],
     # 'font.size': 12,
 
     # ticks
@@ -554,6 +554,38 @@ def main():
         # 'LR: Genomic + HT/fident/pident/e-value/SIZE-COV': genomic_features + ['has_templates', 'fident', 'pident', 'evalue'] + preppi_features
     }
 
+    """X_train, X_test, y_train, y_test = train_test_split(
+        data.drop(columns = 'label'), data['label'],
+        test_size = 0.2, random_state = RANDOM_STATE, stratify = data['label']
+    )"""
+    # New 8/25/2025: perform 80/20 train-test split, with the stipulation that all test pairs must come from the PrePPI data file
+    TEST_SIZE_FRACTION = 0.20
+    P_TOTAL = data['label'].sum()
+    N_TOTAL = len(data) - P_TOTAL
+    P_TARGET_TEST, N_TARGET_TEST = int(TEST_SIZE_FRACTION * P_TOTAL), int(TEST_SIZE_FRACTION * N_TOTAL)
+    
+    preppi_data = data[data['is_preppi'] == 1].copy()
+    p_available = preppi_data['label'].sum()
+    n_available = len(preppi_data) - p_available
+    if p_available < P_TARGET_TEST or n_available < N_TARGET_TEST:
+        logging.error(f"Error: Not enough PrePPI data to create representative test set with {P_TARGET_TEST} P and {N_TARGET_TEST} N samples. Available: {p_available} P, {n_available} N. Exiting.")
+        return
+    # craft test set from PrePPI data only
+    pos_preppi_test = preppi_data[preppi_data['label'] == 1].sample(n = P_TARGET_TEST, random_state = RANDOM_STATE, replace = False)
+    neg_preppi_test = preppi_data[preppi_data['label'] == 0].sample(n = N_TARGET_TEST, random_state = RANDOM_STATE, replace = False)
+
+    test_data = pd.concat([pos_preppi_test, neg_preppi_test], ignore_index = False)
+    train_data = data.drop(index = test_data.index)
+
+    train_data = train_data.sample(frac = 1, random_state = RANDOM_STATE).reset_index(drop = True) # shuffle training data
+    test_data = test_data.sample(frac = 1, random_state = RANDOM_STATE).reset_index(drop = True) # shuffle test data
+
+    logging.info(f"Training set size: {len(train_data)} ({train_data['label'].value_counts().to_dict()})")
+    logging.info(f"Test set size: {len(test_data)} ({test_data['label'].value_counts().to_dict()})")
+
+    X_train, y_train = train_data.drop(columns = ['label', 'is_preppi']), np.asarray(train_data['label'])
+    X_test, y_test = test_data.drop(columns = ['label', 'is_preppi']), np.asarray(test_data['label'])
+
     """ Part 1: Full Raw Data File (P:N Ratio 1:4.5). Use all existing PPI pairs to train RFC.
         80-20 Train-Test Split, stratified by label proportions.
     """
@@ -564,25 +596,6 @@ def main():
         f"PrePPI vs. RF Classifier with Genomic and Foldseek Features (P:N Ratio = 1:{(total_neg/total_pos):.1f})", 
         fontsize = 16
     )
-
-    """X_train, X_test, y_train, y_test = train_test_split(
-        data.drop(columns = 'label'), data['label'],
-        test_size = 0.2, random_state = RANDOM_STATE, stratify = data['label']
-    )"""
-    # New 8/23/2025: perform 80/20 train-test split, with the stipulation that all test pairs must come from the PrePPI data file
-    TEST_SIZE_FRACTION = 0.20
-    TEST_SET_SIZE = int(TEST_SIZE_FRACTION * len(data)) # target 20% of negatives, maintaining overall P:N ratio
-    test_candidates = data[data['is_preppi'] == 1].copy()
-    if TEST_SET_SIZE > len(test_candidates):
-        logging.error(f"Error: Not enough PrePPI negatives ({len(test_candidates)}) to meet target test set size ({TEST_SET_SIZE}).")
-        return
-    test_data = test_candidates.sample(n = TEST_SET_SIZE, random_state = RANDOM_STATE, replace = False)
-    train_data = data.drop(index = test_data.index).reset_index(drop = True)
-    logging.info(f"Training set size: {len(train_data)} ({train_data['label'].value_counts().to_dict()})")
-    logging.info(f"Test set size: {len(test_data)} ({test_data['label'].value_counts().to_dict()})")
-
-    X_train, y_train = train_data.drop(columns = ['label', 'is_preppi']), np.asarray(train_data['label'])
-    X_test, y_test = test_data.drop(columns = ['label', 'is_preppi']), np.asarray(test_data['label'])
 
     for clf_id, features in feature_sets.items():
 
