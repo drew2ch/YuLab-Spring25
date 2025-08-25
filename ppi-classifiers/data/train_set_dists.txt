@@ -1,0 +1,5 @@
+Structural (Total 4401): 848 P, 3553 N 
+ Non-Structural (Total 6222): 1292 P, 4930 N
+============
+Structural: 318 Homodimers 
+ Non-Structural: 315 Homodimers

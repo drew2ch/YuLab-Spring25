@@ -98,9 +98,11 @@ def get_structure_from_file(pdb_id, pdb_dir):
     for ext in ['.cif', '.pdb']:
         path = os.path.join(pdb_dir, f"{pdb_id.lower()}{ext}")
         if os.path.exists(path):
-            parser = MMCIFParser(QUIET = True) if ext == '.cif' else PDBParser(QUIET = True)
             try:
-                return parser.get_structure(pdb_id, path)[0]
+                parser = MMCIFParser(QUIET = True) if ext == '.cif' else PDBParser(QUIET = True)
+                structure = parser.get_structure(pdb_id, path)[0]
+                logging.info(f"Successfully loaded structure {pdb_id} from {path}.")
+                return structure
             except Exception as e:
                 logging.error(f"Could not parse query structure {path}: {e}")
                 return None
@@ -123,6 +125,7 @@ def get_structure_from_archive(pdb_id, archive_path):
             try:
                 parser = MMCIFParser(QUIET = True)
                 structure = parser.get_structure(pdb_id, structure_handle)[0]
+                logging.info(f"Successfully parsed {filepath} as mmCIF format.")
                 return structure
             except Exception as e:
                 logging.warning(f"Could not parse {filepath} as mmCIF ({e}). Attempting legacy PDB format...")
@@ -162,6 +165,7 @@ def get_structure_from_bundle(pdb_id, bundle_base_dir):
                     parser = MMCIFParser(QUIET = True)
                     structure = parser.get_structure(pdb_id, cif_file_handle)[0]
                     cif_file_handle.close()
+                    logging.info(f"Successfully parsed {cif_member_name} from bundle {filepath}.")
                     return structure
             except KeyError:
                 logging.warning(f"Member file '{cif_member_name}' not found in bundle {filepath}.")

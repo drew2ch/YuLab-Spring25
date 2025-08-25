@@ -1,5 +1,7 @@
 """ Training Random Forest Classifier Algorithm on PPI feature space with Foldseek-integrated features.
     Andrew Chung, hc893; Optimized on 8/7/2025, Updated 8/8/2025
+--- Second run of edits on 8/23/2025 on expanded training set, with built-in structural/non-structural discrimination and 
+--- removal (optional) of homodimers from training data.
 """
 
 import warnings
@@ -121,7 +123,7 @@ def extract_templates(data: pd.DataFrame, template_path: str = DEFAULT_TEMPLATES
             with open(os.path.join(template_path, f"{p1}_{p2}.json"), 'r') as infile:
                 template = json.load(infile)
         except Exception as e:
-            # since template-dependent features are defaulted at 0, the row will simply be skipped
+            # template-dependent features are defaulted to 0, so we just continue to the next row.
             erroneous_pairs.append(f'{p1}_{p2}')
             logging.warning(f"Error: unable to import {p1}_{p2}.json from specified directory.")
             continue
@@ -375,7 +377,7 @@ def create_ratioed_test_set_oversample_neg(X_orig_test, y_orig_test, target_neg_
     """
     Creates test sets by keeping all positive samples from X_orig_test and 
     oversampling negative samples (with replacement) from X_orig_test 
-    to achieve the target_neg_multiplier (negatives = positives * multiplier).
+    to achieve the target_neg_multiplier (negatives * multiplier).
     """
     rng = np.random.RandomState(random_state)
     
@@ -440,12 +442,25 @@ def create_ratioed_test_set_oversample_neg(X_orig_test, y_orig_test, target_neg_
           
     return X_test_ratioed, y_test_ratioed
 
+""" New for 8/23/2025: Eliminate homo-dimer pairs from training set consideration.
+"""
+def remove_homodimers(data: pd.DataFrame):
+    if 'ppi' not in data.columns:
+        logging.error(f"Data file missing required column: \'ppi\'")
+        return data
+    data[['protein1', 'protein2']] = data['ppi'].str.strip().str.split(':', n = 1, expand = True)
+    data_no_homodimers = data[data['protein1'] != data['protein2']]
+    return data_no_homodimers.drop(columns = ['protein1', 'protein2'])
+
 def main():
 
     parser = argparse.ArgumentParser(description = "Foldseek Classifier Training")
     parser.add_argument('--data_path', type = str, default = DEFAULT_DATA_PATH, help = "Training data path.")
     parser.add_argument('--template_data_path', type = str, default = DEFAULT_TEMPLATES_PATH, help = "Path containing template .json files.")
     parser.add_argument('--output_path', type = str, default = DEFAULT_OUTPUT_PATH, help = "Output directory for result figures.")
+    parser.add_argument('--figure_title', type = str, required = True, default = None, help = "If specified, use this title for output figures.")
+    parser.add_argument('--label_type', type = str, required = True, default = None, help = "If specified, split data file into separate, structural and non-structural analyses. Options: None, 'struct', 'nonstruct'")
+    parser.add_argument('--remove_homodimers', action = 'store_true', help = "If set, remove homodimer pairs from training data.")
     args = parser.parse_args()
 
     logging.info("=== PPI Classifier Training Script ===")
@@ -454,7 +469,7 @@ def main():
     # Load comprehensive PPI data set, retain only genomic features, PrePPI criteria, and lable
     try:
         data = pd.read_csv(args.data_path)
-        required_cols = np.array(['ppi', 'Total', 'co-expression', 'BP', 'CC', 'MF', 'label'])
+        required_cols = np.array(['ppi', 'co.expression', 'BP', 'CC', 'MF', 'str_label', 'non_struct_label', 'is_preppi', 'Total'])
         for col in required_cols:
             if col not in data.columns:
                 logging.error(f"Data file missing required column: {col}")
@@ -463,8 +478,20 @@ def main():
     except FileNotFoundError:
         logging.error(f"Data file(s) not found.")
         return
-    assert 'label' in data.columns and 'ppi' in data.columns, \
+    assert 'ppi' in data.columns, \
         logging.error("Error: either 'label' or 'ppi' column is missing somehow.")
+    
+    # Optionally filter data by label type (structural vs non-structural), and remove homodimers as specified
+    if args.label_type is not None:
+        if args.label_type == 'struct':
+            data = data[data['str_label'] > -1].rename(columns = {'str_label': 'label'}).drop(columns = 'non_struct_label')
+        elif args.label_type == 'nonstruct':
+            data = data[data['non_struct_label'] > -1].rename(columns = {'non_struct_label': 'label'}).drop(columns = 'str_label')
+        else:
+            logging.error(f"Error: Invalid label_type specified: {args.label_type}. Options are None, 'struct' or 'nonstruct'.")
+            return
+    if args.remove_homodimers:
+        data = remove_homodimers(data)
 
     # import homologous template-based features
     data = extract_templates(data, template_path = args.template_data_path)
@@ -505,7 +532,7 @@ def main():
     --- Classifier B: Genomic + HT, SIZE/COV
     """
     
-    genomic_features = ['co-expression', 'BP', 'CC', 'MF']
+    genomic_features = ['co.expression', 'BP', 'CC', 'MF']
     preppi_features = ['SIZE', 'COV']
     feature_sets = {
         'PrePPI -- total': ['Total'],
@@ -538,27 +565,37 @@ def main():
         fontsize = 16
     )
 
-    X_train, X_test, y_train, y_test = train_test_split(
+    """X_train, X_test, y_train, y_test = train_test_split(
         data.drop(columns = 'label'), data['label'],
         test_size = 0.2, random_state = RANDOM_STATE, stratify = data['label']
-    )
-    y_train = np.asarray(y_train)
-    y_test = np.asarray(y_test)
+    )"""
+    # New 8/23/2025: perform 80/20 train-test split, with the stipulation that all test pairs must come from the PrePPI data file
+    TEST_SIZE_FRACTION = 0.20
+    TEST_SET_SIZE = int(TEST_SIZE_FRACTION * len(data)) # target 20% of negatives, maintaining overall P:N ratio
+    test_candidates = data[data['is_preppi'] == 1].copy()
+    if TEST_SET_SIZE > len(test_candidates):
+        logging.error(f"Error: Not enough PrePPI negatives ({len(test_candidates)}) to meet target test set size ({TEST_SET_SIZE}).")
+        return
+    test_data = test_candidates.sample(n = TEST_SET_SIZE, random_state = RANDOM_STATE, replace = False)
+    train_data = data.drop(index = test_data.index).reset_index(drop = True)
+    logging.info(f"Training set size: {len(train_data)} ({train_data['label'].value_counts().to_dict()})")
+    logging.info(f"Test set size: {len(test_data)} ({test_data['label'].value_counts().to_dict()})")
+
+    X_train, y_train = train_data.drop(columns = ['label', 'is_preppi']), np.asarray(train_data['label'])
+    X_test, y_test = test_data.drop(columns = ['label', 'is_preppi']), np.asarray(test_data['label'])
 
     for clf_id, features in feature_sets.items():
 
         assert all(feature in data.columns for feature in features), \
             logging.error(f"Error: One or more features {features} not found in data columns.")
         print(f"\n=== Evaluating Classifier {clf_id} ===")
-        
+
+        X_train_subset, X_test_subset = X_train[features], X_test[features]
         if clf_id == 'PrePPI -- total':
-            y_prob = X_test[features].squeeze()
+            y_prob = X_test_subset.squeeze()
             RESULTS = compute_metrics(y_test, y_prob)
-        # elif clf_id.split(':')[0] == 'LR':
-            # spw = np.sum(y_train == 0) / np.sum(y_train == 1)
-            # RESULTS, y_prob = train_log(X_train[features], y_train, X_test[features], y_test)
         else:
-            RESULTS, y_prob = train_rfc(X_train[features], y_train, X_test[features], y_test)
+            RESULTS, y_prob = train_rfc(X_train_subset, y_train, X_test_subset, y_test)
 
         print(f"Model training complete for classifier {clf_id}.")
         analyze_predictions(
@@ -576,9 +613,9 @@ def main():
     print(f"\n{'='*60}")
     logging.info(f"Part 1: All classifiers have been trained/evaluated. Saving figures...")
     try:
-        plt.savefig(os.path.join(args.output_path, f'foldseek_classifiers_fulldata_{DATE_ID}.png'), bbox_inches = 'tight', dpi = 300)
+        plt.savefig(os.path.join(args.output_path, f'{DATE_ID}_foldseek_classifiers_{args.figure_title}_fulldata.png'), bbox_inches = 'tight', dpi = 300)
         plt.close()
-        logging.info(f"Plots saved as 'foldseek_classifiers_fulldata_{DATE_ID}.png'.")
+        logging.info(f"Plots saved as '{DATE_ID}_foldseek_classifiers_{args.figure_title}_fulldata.png'.")
     except Exception as e:
         logging.error(f"Error saving plots: {e}")
         return
@@ -590,11 +627,13 @@ def main():
         Ratios (P:N): 1:1, 1:10, 1:100, 1:1000
         In the same fashion as Part 1, 80-20 Train-Test Split, stratified by label proportions.
     """
+    LABEL_TYPE = 'struct' if args.label_type == 'struct' else 'non-struct' if args.label_type == 'nonstruct' else 'None'
+    HOMODIMERS_STATUS = 'No Homodimers' if args.remove_homodimers else 'With Homodimers'
     print(f"\n{'='*60}\n")
     print("=== Part 2: Training Classifiers with Class Ratios ===")
     fig, ax = plt.subplots(2, 4, figsize = (20, 8))
     fig.suptitle(
-        f"PrePPI (Total) vs. Random Forest Classifier with Genomic and Foldseek Features: Class Ratios", 
+        f"PrePPI (Total) vs. RFC with Genomic/Foldseek Features: Class Ratios ({LABEL_TYPE}, {HOMODIMERS_STATUS})", 
         fontsize = 16
     )
     # First, train random forest classifiers on a balanced (constant) 1:1 training set
@@ -667,15 +706,15 @@ def main():
                 clf_type = clf_id
             )
         
-        ax[0, i].set_title(f"Test Set: P:N ~ 1:{ratio} ({n_p_test_ratio}P:{n_n_test_ratio}N)", fontsize = 10)
+        ax[0, i].set_title(f"P:N ~ 1:{ratio} ({n_p_test_ratio}P : {n_n_test_ratio}N)", fontsize = 10)
 
     # finalize figures, save to output directory
     print(f"\n{'='*60}")
     logging.info(f"All classifiers have been trained/evaluated. Saving figures...")
     try:
-        plt.savefig(os.path.join(args.output_path, f'foldseek_classifiers_ratio_{DATE_ID}.png'), bbox_inches = 'tight', dpi = 300)
+        plt.savefig(os.path.join(args.output_path, f'{DATE_ID}_foldseek_classifiers_{args.figure_title}_ratio.png'), bbox_inches = 'tight', dpi = 300)
         plt.close()
-        logging.info(f"Plots saved as 'foldseek_classifiers_ratio_{DATE_ID}.png'.")
+        logging.info(f"Plots saved as '{DATE_ID}_foldseek_classifiers_{args.figure_title}_ratio.png'.")
     except Exception as e:
         logging.error(f"Error saving plots: {e}")
         return
