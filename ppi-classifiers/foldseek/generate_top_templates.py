@@ -47,6 +47,7 @@ FOLDSEEK_TSV_DIR = os.path.join(DATA_BASE_DIR, "foldseek-homologs/")
 AF3_MODELS_DIR = os.path.join(DATA_BASE_DIR, "af3-models/")
 BASE_OUTPUT_JSONL_PATH = os.path.join(DATA_BASE_DIR, "template-data")
 BASE_SCRATCH_PATH = os.path.join(DATA_BASE_DIR, "scratch")
+CANDIDATE_TEMPLATES_PATH = os.path.join(DATA_BASE_DIR, "candidate-templates-top20")
 DATAFILE_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/features.csv")
 
 # Define Data Files
@@ -553,15 +554,20 @@ def process_single_pair(p1_id, p2_id):
                     if ires_row.empty: continue
 
                     score = (align1['fident'] + align2['fident']) / 2.0
+                    align1_native = {k: (int(v) if isinstance(v, np.integer) else float(v) if isinstance(v, np.floating) else v) for k, v in align1.items()}
+                    align2_native = {k: (int(v) if isinstance(v, np.integer) else float(v) if isinstance(v, np.floating) else v) for k, v in align2.items()}
+
                     template_data = {
                         "pdb_id": pdb2_id,
-                        "template_pair": (align1['target'], align2['target']),
-                        "alignment_data": (align1, align2),
-                        "score": score,
-                        "fident": (align1['fident'], align2['fident']),
-                        "pident": (align1['pident'], align2['pident']),
-                        "e_value": (align1['evalue'], align2['evalue']),
-                        "ires_row_index": ires_row.index[0]
+                        "template_pair": (align1_native['target'], align2_native['target']),
+                        # Store the cleaned alignment data
+                        "alignment_data": (align1_native, align2_native), 
+                        "score": float(score),
+                        "fident": (float(align1_native['fident']), float(align2_native['fident'])),
+                        "pident": (float(align1_native['pident']), float(align2_native['pident'])),
+                        "e_value": (float(align1_native['evalue']), float(align2_native['evalue'])),
+                        # Cast the index value to a standard Python integer
+                        "ires_row_index": int(ires_row.index[0]) 
                     }
                     candidate_templates.append(template_data)
         except (ValueError, KeyError, IndexError) as e:
@@ -571,14 +577,54 @@ def process_single_pair(p1_id, p2_id):
     # if no valid template pairs found, structural data cannot be encoded
     if not candidate_templates:
         logging.info(f"No valid templates found for {pair_key}.")
+        for cond in range(1, 4):
+            output_jsonl_path = os.path.join(CANDIDATE_TEMPLATES_PATH, f"best_templates_condition_{cond}_train_{pair_key}.jsonl")
+            os.makedirs(os.path.dirname(output_jsonl_path), exist_ok = True)
+            with open(output_jsonl_path, 'w') as jsonl_file:
+                json.dump({}, jsonl_file)
+                jsonl_file.write('\n')
+            logging.info(f"Saved empty template file for {pair_key} under condition '{cond}' to {output_jsonl_path}.")
         return pair_data
     else:
         logging.info(f"Found {len(candidate_templates)} candidate templates for {pair_key}.")
+    candidate_templates.sort(key = lambda x: x["score"], reverse = True)
+
+    # --- STAGE 1.5: COMPILE AND SAVE CANDIDATE TEMPLATES TO JSONL --- (09/15/2025)
+
+    # Save top 20 candidates to JSONL for record-keeping, 3 distinct conditions
+    # 1. e(A) > 1e-5 || e(B) > 1e-5 || f(A) < 0.8 || f(B) < 0.8
+    # 2. e(A) > 1e-5 || e(B) > 1e-5 || f(A) < 0.5 || f(B) < 0.5
+    # 3. Default (no filter); keep all templates
+    
+    for cond in range(1, 4):
+        if cond == 1:
+            filtered_templates = [
+                t for t in candidate_templates 
+                if t['e_value'][0] > 1e-5 or t['e_value'][1] > 1e-5 or t['fident'][0] < 0.8 or t['fident'][1] < 0.8
+            ]
+        elif cond == 2:
+            filtered_templates = [
+                t for t in candidate_templates 
+                if t['e_value'][0] > 1e-5 or t['e_value'][1] > 1e-5 or t['fident'][0] < 0.5 or t['fident'][1] < 0.5
+            ]
+        else:
+            filtered_templates = candidate_templates
+
+        # re-sort filtered template pairs by score
+        # filtered_templates.sort(key = lambda x: x["score"], reverse = True)
+        top_n_templates = filtered_templates[:20]
+        output_jsonl_path = os.path.join(CANDIDATE_TEMPLATES_PATH, f"best_templates_condition_{cond}_train_{pair_key}.jsonl")
+        os.makedirs(os.path.dirname(output_jsonl_path), exist_ok = True)
+
+        with open(output_jsonl_path, 'w') as jsonl_file:
+            for template in top_n_templates:
+                json.dump(template, jsonl_file)
+                jsonl_file.write('\n')
+        logging.info(f"Saved top {len(top_n_templates)} templates for {pair_key} under condition '{cond}' to {output_jsonl_path}.")
 
     # --- STAGE 2: FOR EACH CONDITION, MAP TEMPLATE PAIRS TO QUERY COMPLEX ---
 
     # Sort candidate templates for this specific condition by score, and then select top template
-    candidate_templates.sort(key = lambda x: x["score"], reverse = True)
     top_template = candidate_templates[0]
     pdb_id = top_template['pdb_id']
     
@@ -774,14 +820,13 @@ def main():
     parser.add_argument('--pdb_dir', default = LOCAL_PDB_DIR, help = "local path storing 3D template PDB structures.")
     parser.add_argument('--datafile_path', default = DATAFILE_PATH, help = "data file containing experimental protein pairs and all features.")
     parser.add_argument('--scratch_path', default = BASE_SCRATCH_PATH, help = "scratch path directory.")
+    parser.add_argument('--candidate_templates_dir', default = CANDIDATE_TEMPLATES_PATH, help = "output path to save candidate templates in .jsonl format.")
     parser.add_argument('--json_output_path', default = BASE_OUTPUT_JSONL_PATH, help = "specify output path of .jsonl files containing structural features.")
     parser.add_argument('--task-id', default = 0, type = int)
     parser.add_argument('--total-tasks', default = 1, type = int)
     args = parser.parse_args()
 
     # Load shared resources
-    
-
     # Read and partition the pair list
     all_pairs = [tuple(ppi_string.split(':')) for ppi_string in DATA['ppi'].dropna() if len(ppi_string.split(':')) == 2]
     assert len(all_pairs) == len(DATA), "Error: some PPI pairs were not successfully accounted for."

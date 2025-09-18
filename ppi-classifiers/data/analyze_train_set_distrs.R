@@ -55,4 +55,4 @@ if (any(is.infinite(train$Total))){
     train$Total[row] = 0
   }
 }
-write.csv(train, paste0(PWD, "train_set_with_preppi.csv"), row.names = FALSE)
+# write.csv(train, paste0(PWD, "train_set_with_preppi.csv"), row.names = FALSE)
