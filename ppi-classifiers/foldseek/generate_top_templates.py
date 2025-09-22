@@ -1,7 +1,11 @@
 """ Script to generate SIZ/COV features as defined by the PrePPI interaction classifier model.
     Incorporates Juheon Chu's code plus custom machine-level modifications by Andrew Chung.
+
+    Andrew Chung (hc893)
+
 --- Run 1: 8/1/2025 -- full comprehensive run for initial Genomic/PrePPI intersection pairs
 --- Run 2: 8/21/2025 -- augmentative run to accommodate expanded training set
+--- Rum 3: 9/20/2025 -- generalized run for self-template conditions and expanded candidate templates; binding site mapping saved for P-R computation
 """
 
 import gzip
@@ -10,12 +14,14 @@ import tempfile
 import urllib.request
 
 from pathlib import Path
+from collections import defaultdict
 from Bio.Blast import NCBIXML
 from Bio.Blast.Applications import NcbiblastpCommandline
 from Bio.PDB import PDBParser, MMCIFParser, NeighborSearch
 import re
 import os
 import glob
+import copy
 import numpy as np
 import pandas as pd
 import json
@@ -34,8 +40,8 @@ logging.basicConfig(
 )
 warnings.simplefilter('ignore', PDBConstructionWarning)
 
-DEFAULT_USER_BASE_DIR = "C:/Users/hychu/OneDrive/Desktop/Summer25"
-DATA_BASE_DIR = "F:/Research/ppi-cdata" # utilizing external drive for data storage
+# DEFAULT_USER_BASE_DIR = "C:/Users/hychu/OneDrive/Desktop/Summer25"
+DATA_BASE_DIR = "/home/hc893/data"
 
 IRES_TEMPLATE_FILE = os.path.join(DATA_BASE_DIR, "ires_perpdb_alltax.txt")
 # IRES_QUERY_FILE = os.path.join(DATA_BASE_DIR, "ires_all.txt")
@@ -43,18 +49,19 @@ IRES_TEMPLATE_FILE = os.path.join(DATA_BASE_DIR, "ires_perpdb_alltax.txt")
 YU_PDB_DIR = "/share/yu/resources/pdb/"
 YU_PDB_BUNDLE_DIR = "/share/yu/resources/pdb_like/"
 LOCAL_PDB_DIR = os.path.join(DATA_BASE_DIR, "pdb-templates/")
-FOLDSEEK_TSV_DIR = os.path.join(DATA_BASE_DIR, "foldseek-homologs/")
-AF3_MODELS_DIR = os.path.join(DATA_BASE_DIR, "af3-models/")
-BASE_OUTPUT_JSONL_PATH = os.path.join(DATA_BASE_DIR, "template-data")
+FOLDSEEK_TSV_DIR = "/share/yu/jc3668/ppi_pred/data/tsv_for_andrew_9352_pairs"
+AF3_MODELS_DIR = "/share/yu/ppi_pred/af3/af3-results"
+BASE_OUTPUT_JSONL_PATH = os.path.join(DATA_BASE_DIR, "template-features")
 BASE_SCRATCH_PATH = os.path.join(DATA_BASE_DIR, "scratch")
-CANDIDATE_TEMPLATES_PATH = os.path.join(DATA_BASE_DIR, "candidate-templates-top20")
-DATAFILE_PATH = os.path.join(DEFAULT_USER_BASE_DIR, "github/ppi-classifiers/data/features.csv")
+CANDIDATE_TEMPLATES_PATH = os.path.join(DATA_BASE_DIR, "candidate-templates")
+DATAFILE_PATH = os.path.join(DATA_BASE_DIR, "train_set.csv")
 
 # Define Data Files
 IRES_TEMPLATE_DATA = pd.read_csv(IRES_TEMPLATE_FILE, sep = "\t")\
     .dropna(subset = ['UniProtA', 'UniProtB', 'ChainA', 'ChainB'])
 DATA = pd.read_csv(DATAFILE_PATH)
 CA_DISTANCE_THRESHOLD = 6.05 # Angstroms, as defined by PrePPI model
+CONDITIONS = ['condition_1', 'condition_2', 'condition_3']
 
 # RESIDUE_MAP as provided in your original script context (second script in first prompt)
 RESIDUE_MAP = {
@@ -332,8 +339,8 @@ def get_mapped_binding_sites(
         if len(t_pdb_seq) < 10:
             logging.warning(f"Extracted sequence for PDB {pdb}_{chain} is too short ({len(t_pdb_seq)} residues).")
             return {}
-        print(f"DEBUG: For PDB {pdb}_{chain}, t_residue_id_pos_mapping (first 10): {list(t_residue_id_pos_mapping.items())[:10]}")
-        print(f"Extracted sequence for chain {chain}: {t_pdb_seq}")
+        logging.debug(f"DEBUG: For PDB {pdb}_{chain}, t_residue_id_pos_mapping (first 10): {list(t_residue_id_pos_mapping.items())[:10]}")
+        logging.info(f"Extracted sequence for chain {chain}: {t_pdb_seq}")
 
         # Get foldseek sequence (A') from alignment
         t_foldseek_seq = alignment['taln'].replace('-', '')
@@ -417,10 +424,10 @@ def get_mapped_binding_sites(
                 gapless_pos += 1
                 full_target_pos += 1
 
-        print(f"BLAST command: blastp -query {t_foldseek_seq_file} -subject {t_pdb_seq_file} -outfmt 5")
-        print(f"Alignment: query = {hsp.query}, sbjct = {hsp.sbjct}")
-        print(f"Identity: {hsp.identities / len(hsp.query) * 100:.2f}%, E-value: {hsp.expect}")
-        print(f"Foldseek alignment: qaln = {alignment['qaln']}, taln = {alignment['taln']}")
+        logging.info(f"BLAST command: blastp -query {t_foldseek_seq_file} -subject {t_pdb_seq_file} -outfmt 5")
+        logging.info(f"Alignment: query = {hsp.query}, sbjct = {hsp.sbjct}")
+        logging.info(f"Identity: {hsp.identities / len(hsp.query) * 100:.2f}%, E-value: {hsp.expect}")
+        logging.info(f"Foldseek alignment: qaln = {alignment['qaln']}, taln = {alignment['taln']}")
 
         # --- 4. chain maps together to create final PDB-Query map ---
         final_residue_map = {}
@@ -492,6 +499,19 @@ def parse_pdb_residue_id(res_id: str) -> tuple:
     ins_code = match.group(2).upper() if match.group(2) else ' '
     return (' ', res_num, ins_code)  # PDB format requires a tuple (hetfield, resseq, icode)
 
+def save_as_jsonl(data, path):
+    """ Save data as .jsonl. The data must be a list of dictionaries.
+    --- data: list of dicts
+    --- path: output file path
+    """
+    parent_dir = os.path.dirname(path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+    with open(path, 'w') as f:
+        for entry in data:
+            json.dump(entry, f)
+            f.write('\n')
+
 def process_single_pair(p1_id, p2_id):
     """
     Process a single protein pair to compute SIZE and COV metrics by mapping 
@@ -507,24 +527,45 @@ def process_single_pair(p1_id, p2_id):
     """
 
     pair_key = f"{p1_id}_{p2_id}"
-    pair_data = {
+    # store training features
+    pair_data_records = defaultdict(list, {
+        'condition_1': [],
+        'condition_2': [],
+        'condition_3': []
+    })
+    # store final templates and mapped binding sites
+    final_templates = defaultdict(list, {
+        'condition_1': [],
+        'condition_2': [],
+        'condition_3': []
+    })
+    """pair_data = {
+        "condition": None,
         "pair_key": pair_key,
         "pdb_id": None, "chain_ids": None, 
         "fident": 0.0,
         "pident": 0.0,
         "e_value": 0.0,
         "SIZE": 0, "COV": 0.0
-    }
+    }"""
     # SETUP: Define paths to Foldseek results
     try:
         alignments1 = parse_foldseek_tsv(os.path.join(FOLDSEEK_TSV_DIR, f"{p1_id}.tsv"))
         alignments2 = parse_foldseek_tsv(os.path.join(FOLDSEEK_TSV_DIR, f"{p2_id}.tsv"))
         if not alignments1 or not alignments2:
             logging.warning(f"No Foldseek hits for {pair_key}.")
-            return pair_data # Return no data
+            for cond in CONDITIONS:
+                output_jsonl_path = os.path.join(CANDIDATE_TEMPLATES_PATH, f"best_templates_{cond}_train_{pair_key}.jsonl")
+                save_as_jsonl([], output_jsonl_path)
+                logging.info(f"Saved empty template file for {pair_key} under condition '{cond}' to {output_jsonl_path}.")
+            return pair_data_records # Return no data
     except Exception as e:
         logging.error(f"Error parsing Foldseek TSV files for {pair_key}: {e}")
-        return pair_data
+        for cond in CONDITIONS:
+            output_jsonl_path = os.path.join(CANDIDATE_TEMPLATES_PATH, f"best_templates_{cond}_train_{pair_key}.jsonl")
+            save_as_jsonl([], output_jsonl_path)
+            logging.info(f"Saved empty template file for {pair_key} under condition '{cond}' to {output_jsonl_path}.")
+        return pair_data_records
     
     # --- STAGE 1: Collect all valid template candidates ---
     candidate_templates = []
@@ -577,58 +618,266 @@ def process_single_pair(p1_id, p2_id):
     # if no valid template pairs found, structural data cannot be encoded
     if not candidate_templates:
         logging.info(f"No valid templates found for {pair_key}.")
-        for cond in range(1, 4):
-            output_jsonl_path = os.path.join(CANDIDATE_TEMPLATES_PATH, f"best_templates_condition_{cond}_train_{pair_key}.jsonl")
-            os.makedirs(os.path.dirname(output_jsonl_path), exist_ok = True)
-            with open(output_jsonl_path, 'w') as jsonl_file:
-                json.dump({}, jsonl_file)
-                jsonl_file.write('\n')
+        for cond in CONDITIONS:
+            output_jsonl_path = os.path.join(CANDIDATE_TEMPLATES_PATH, f"best_templates_{cond}_train_{pair_key}.jsonl")
+            save_as_jsonl([], output_jsonl_path)
             logging.info(f"Saved empty template file for {pair_key} under condition '{cond}' to {output_jsonl_path}.")
-        return pair_data
+        return pair_data_records
     else:
         logging.info(f"Found {len(candidate_templates)} candidate templates for {pair_key}.")
     candidate_templates.sort(key = lambda x: x["score"], reverse = True)
 
     # --- STAGE 1.5: COMPILE AND SAVE CANDIDATE TEMPLATES TO JSONL --- (09/15/2025)
+    # --- STAGE 2: FOR EACH CONDITION (1-3), MAP TEMPLATE PAIRS (UP TO TOP-20) TO QUERY COMPLEX --- (Expanded 09/19/2025)
 
     # Save top 20 candidates to JSONL for record-keeping, 3 distinct conditions
     # 1. e(A) > 1e-5 || e(B) > 1e-5 || f(A) < 0.8 || f(B) < 0.8
     # 2. e(A) > 1e-5 || e(B) > 1e-5 || f(A) < 0.5 || f(B) < 0.5
     # 3. Default (no filter); keep all templates
     
-    for cond in range(1, 4):
-        if cond == 1:
+    structure_cache = {} # cache loaded structures to avoid redundant loads
+    for cond in CONDITIONS:
+        if cond == 'condition_1':
             filtered_templates = [
                 t for t in candidate_templates 
-                if t['e_value'][0] > 1e-5 or t['e_value'][1] > 1e-5 or t['fident'][0] < 0.8 or t['fident'][1] < 0.8
+                if t['e_value'][0] > 1e-5 or t['e_value'][1] > 1e-5 or \
+                    t['fident'][0] < 0.8 or t['fident'][1] < 0.8
             ]
-        elif cond == 2:
+        elif cond == 'condition_2':
             filtered_templates = [
                 t for t in candidate_templates 
-                if t['e_value'][0] > 1e-5 or t['e_value'][1] > 1e-5 or t['fident'][0] < 0.5 or t['fident'][1] < 0.5
+                if t['e_value'][0] > 1e-5 or t['e_value'][1] > 1e-5 or \
+                    t['fident'][0] < 0.5 or t['fident'][1] < 0.5
             ]
         else:
             filtered_templates = candidate_templates
 
         # re-sort filtered template pairs by score
         # filtered_templates.sort(key = lambda x: x["score"], reverse = True)
+        # top 20 templates set (09/20/2025)
         top_n_templates = filtered_templates[:20]
-        output_jsonl_path = os.path.join(CANDIDATE_TEMPLATES_PATH, f"best_templates_condition_{cond}_train_{pair_key}.jsonl")
-        os.makedirs(os.path.dirname(output_jsonl_path), exist_ok = True)
 
-        with open(output_jsonl_path, 'w') as jsonl_file:
-            for template in top_n_templates:
-                json.dump(template, jsonl_file)
-                jsonl_file.write('\n')
-        logging.info(f"Saved top {len(top_n_templates)} templates for {pair_key} under condition '{cond}' to {output_jsonl_path}.")
+        for template_ in top_n_templates:
 
-    # --- STAGE 2: FOR EACH CONDITION, MAP TEMPLATE PAIRS TO QUERY COMPLEX ---
+            template = copy.deepcopy(template_)
+            template['mapped_binding_sites'] = None
+            pdb_id = template['pdb_id']
+            align1, align2 = template['alignment_data']
+
+            logging.info(f"Template PDB ID: {pdb_id}, Score: {template['score']:.2f}")
+
+            _, template_chain_A = template['template_pair'][0].rsplit('_', 1)
+            _, template_chain_B = template['template_pair'][1].rsplit('_', 1)
+
+            pair_data = {
+                "condition": cond,
+                "pair_key": pair_key,
+                "pdb_id": pdb_id, "chain_ids": f"{template_chain_A},{template_chain_B}", 
+                "fident": template['score'],
+                "pident": np.mean(template['pident']),
+                "e_value": np.mean(template['e_value']),
+                "SIZE": 0, "COV": 0.0
+            }
+
+            if pdb_id in structure_cache:
+                structure = structure_cache[pdb_id]
+                logging.info(f"Using cached structure for {pdb_id}.")
+            else:
+                # a. try to load structure from Yu Lab PDB archive
+                structure = get_structure_from_archive(pdb_id, YU_PDB_DIR)
+                # b. if not found, try the Yu Lab PDB_like mirror
+                if not structure:
+                    structure = get_structure_from_bundle(pdb_id, YU_PDB_BUNDLE_DIR)
+                # c. if still not found, try the download cache
+                if not structure:
+                    structure = get_structure_from_file(pdb_id, LOCAL_PDB_DIR)
+                # d. if all local sources fail, download from RCSB PDB
+                if not structure:
+                    logging.warning(f"Structure {pdb_id} not found in local cache. Attempting to download.")
+                    download_pdb(pdb_id, LOCAL_PDB_DIR)
+                    structure = get_structure_from_file(pdb_id, LOCAL_PDB_DIR)
+                # e. if all attempts fail, log error and skip
+                if not structure:
+                    logging.error(f"Failed to load structure for {pdb_id} after all attempts.")
+                    pair_data_records[cond].append(pair_data)
+                    continue
+                else:
+                    logging.info(f"Structure for {pdb_id} was successfully procured.")
+                    structure_cache[pdb_id] = structure
+
+            map1, map2 = get_mapped_binding_sites(align1, structure), get_mapped_binding_sites(align2, structure)
+            if not map1 or not map2:
+                logging.warning(f"Mapping failed for {template['template_pair']}. Skipping.")
+                pair_data_records[cond].append(pair_data)
+                continue
+            
+            # get ires data for this template from ires_df
+            ires_row_data = IRES_TEMPLATE_DATA.loc[template['ires_row_index']]
+
+            # determine which column, PDBIResA, PDBIResB, corresponds to which chain
+            if ires_row_data['ChainA'] == template_chain_A and ires_row_data['ChainB'] == template_chain_B:
+                ires_list_A = unzip_res_range(ires_row_data['PDBIresA'])
+                ires_list_B = unzip_res_range(ires_row_data['PDBIresB'])
+            elif ires_row_data['ChainA'] == template_chain_B and ires_row_data['ChainB'] == template_chain_A:
+                ires_list_A = unzip_res_range(ires_row_data['PDBIresB'])
+                ires_list_B = unzip_res_range(ires_row_data['PDBIresA'])
+            else:
+                logging.error(f"Chain mismatch for {pair_key} in template {pdb_id}. Skipping.")
+                pair_data_records[cond].append(pair_data)
+                continue
+            chainA_obj, chainB_obj = structure[template_chain_A], structure[template_chain_B]
+
+            # create list of actual Bio.PDB.Residue objects from ires lists
+            # residues_A = [chainA_obj[int(res_id)] for res_id in ires_list_A if res_id.isdigit() and int(res_id) in chainA_obj]
+            # residues_B = [chainB_obj[int(res_id)] for res_id in ires_list_B if res_id.isdigit() and int(res_id) in chainB_obj]
+            residues_A, residues_B = [], []
+            for res_id in ires_list_A:
+                pdb_res_id = parse_pdb_residue_id(res_id)
+                if pdb_res_id and pdb_res_id in chainA_obj:
+                    residues_A.append(chainA_obj[pdb_res_id])
+            for res_id in ires_list_B:
+                pdb_res_id = parse_pdb_residue_id(res_id)
+                if pdb_res_id and pdb_res_id in chainB_obj:
+                    residues_B.append(chainB_obj[pdb_res_id])
+            
+            # use NeighborSearch to find template IRes pairs
+            all_atoms_B = [atom for res in residues_B for atom in res.get_atoms() if atom.name == 'CA']
+            if not all_atoms_B:
+                logging.warning(f"No CA atoms found in chain B residues for {pdb_id}")
+                pair_data_records[cond].append(pair_data)
+                continue
+            ns = NeighborSearch(all_atoms_B)
+
+            template_interacting_pairs = []
+            for res_a in residues_A:
+                if 'CA' in res_a:
+                    ca_a = res_a['CA']
+                    # find all CA atoms in chain B <=6.05A of this CA in chain A
+                    nearby_b_atoms = ns.search(ca_a.coord, CA_DISTANCE_THRESHOLD, 'A')
+                    for atom_b in nearby_b_atoms:
+                        res_b = atom_b.get_parent()
+                        template_res_a_id = f"{res_a.id[1]}{res_a.id[2].strip()}"
+                        template_res_b_id = f"{res_b.id[1]}{res_b.id[2].strip()}"
+                        template_interacting_pairs.append((template_res_a_id, template_res_b_id))
+            n_template_pairs = len(template_interacting_pairs)
+            if n_template_pairs == 0: 
+                logging.warning(f"No interacting residue pairs found for {pair_key} in template {pdb_id}.")
+                pair_data_records[cond].append(pair_data)
+                continue
+            logging.info(f"Found {n_template_pairs} interacting residue pairs in template {pdb_id} for {pair_key}.")
+
+            # A. Mapping of template residue pairs to query residue pairs
+            mapped_query_pairs = []
+            for template_res_a, template_res_b in template_interacting_pairs:
+                query_pos_a = map1.get(template_res_a)
+                query_pos_b = map2.get(template_res_b)
+                if query_pos_a is not None and query_pos_b is not None:
+                    mapped_query_pairs.append((query_pos_a, query_pos_b))
+            if not mapped_query_pairs:
+                logging.warning(f"No template pairs could be mapped for {pair_key}.")
+                pair_data_records[cond].append(pair_data)
+                continue
+            """
+            output_jsonl_path = os.path.join(CANDIDATE_TEMPLATES_PATH, f"best_templates_condition_{cond}_train_{pair_key}.jsonl")
+            os.makedirs(os.path.dirname(output_jsonl_path), exist_ok = True)
+
+            with open(output_jsonl_path, 'w') as jsonl_file:
+                for template in top_n_templates:
+                    json.dump(template, jsonl_file)
+                    jsonl_file.write('\n')
+            logging.info(f"Saved top {len(top_n_templates)} templates for {pair_key} under condition '{cond}' to {output_jsonl_path}.")
+            """
+            
+            # B. Extract unique active residues for each protein; 0-based indexing
+            active_residues_a = sorted(list(set([pair[0] for pair in mapped_query_pairs])))
+            active_residues_b = sorted(list(set([pair[1] for pair in mapped_query_pairs])))
+
+            # CHECKPOINT: incorporate mapped query pairs into template JSONL encoding
+            template['mapped_binding_sites'] = [active_residues_a, active_residues_b]
+            final_templates[cond].append(template)
+
+            # C. Import Query Structures (AFDB Generated Models)
+            query_specific_file = f"fold_{p1_id.lower()}_{p2_id.lower()}_model_0.cif"
+            logging.info(f"Recursively searching for {query_specific_file}...")
+            
+            search_pattern = os.path.join(AF3_MODELS_DIR, '**', query_specific_file)
+            cif_files = glob.glob(search_pattern, recursive = True)
+            if not cif_files:
+                logging.warning(f"File {query_specific_file} not found in {AF3_MODELS_DIR}.")
+                pair_data_records[cond].append(pair_data)
+                continue
+            logging.info(f"Found evidence of AF3 Model {query_specific_file}.")
+            
+            # D. Load and process the top query structure.
+            # Note: This assumes that the AF3 model are stored in a specific directory structure.
+            # cif_files.sort()
+            top_model_file = cif_files[0]
+            # --- FIX: Use os.path to split the path string ---
+            parent_dir = os.path.dirname(top_model_file)
+            filename = os.path.basename(top_model_file)
+            model_stem, _ = os.path.splitext(filename) # Splits 'model.cif' into ('model', '.cif')
+            
+            try:
+                query_structure = get_structure_from_file(model_stem, parent_dir)
+                if not query_structure:
+                    logging.warning(f"Failed to load query structure {filename}")
+                    pair_data_records[cond].append(pair_data)
+                    continue
+                    
+                if 'A' not in query_structure or 'B' not in query_structure:
+                    logging.warning(f"Missing chains A/B in query structure")
+                    pair_data_records[cond].append(pair_data)
+                    continue
+                
+                # Extract constituent chains A and B and their residues
+                residues_list_A, residues_list_B = list(query_structure['A'].get_residues()), list(query_structure['B'].get_residues())
+            
+                if len(residues_list_A) == 0 or len(residues_list_B) == 0:
+                    logging.warning(f"No residues found in chains A/B for query structure")
+                    pair_data_records[cond].append(pair_data)
+                    continue
+
+                inter_ca_distances = []
+                invalid_pairs = 0
+
+                for i1, i2 in mapped_query_pairs:
+                    if i1 < len(residues_list_A) and i2 < len(residues_list_B):
+                        res1, res2 = residues_list_A[i1], residues_list_B[i2]
+                        if 'CA' in res1 and 'CA' in res2:
+                            distance = np.linalg.norm(res1['CA'].coord - res2['CA'].coord)
+                            inter_ca_distances.append(distance)
+                        else: invalid_pairs += 1
+                    else: invalid_pairs += 1
+                
+                if invalid_pairs > 0:
+                    logging.debug(f"Invalid residue pairs found in model: {invalid_pairs} pairs skipped.")
+                
+                # Tally # of pairs conserved
+                conserved_amount = sum(1 for d in inter_ca_distances if d <= CA_DISTANCE_THRESHOLD)
+                logging.debug(f"Model has {conserved_amount}/{len(inter_ca_distances)} conserved pairs.")
+            
+            except Exception as e:
+                logging.error(f"Error processing model for {pair_key}: {e}")
+                pair_data_records[cond].append(pair_data)
+                continue
+            
+            # E. compute SIZE and COV metrics across the models
+            # - SIZE is defined as the number of conserved residue pairs
+            # - COV is defined as the fraction of conserved residue pairs
+            #   relative to the total number of template residue pairs
+            #   The initial count of template residue pairs is n_template_pairs, held constant.
+            pair_data['SIZE'] = conserved_amount
+            pair_data['COV'] = conserved_amount / n_template_pairs if n_template_pairs > 0 else 0.0
+            pair_data_records[cond].append(pair_data)
+            logging.info(f"Final metrics for {pair_key}: SIZE = {pair_data['SIZE']}, COV = {pair_data['COV']:.2f}")
+
+    # --- STAGE 2: FOR EACH CONDITION (1-3), MAP TEMPLATE PAIRS (UP TO TOP-20) TO QUERY COMPLEX ---
 
     # Sort candidate templates for this specific condition by score, and then select top template
-    top_template = candidate_templates[0]
-    pdb_id = top_template['pdb_id']
+    # top_template = candidate_templates[0]
+    # pdb_id = top_template['pdb_id']
     
-    logging.info(f"Processing top template for {pair_key}.")
+    """logging.info(f"Processing top template for {pair_key}.")
     align1, align2 = top_template['alignment_data']
 
     # --- Centralized Structure Loading ---
@@ -718,12 +967,12 @@ def process_single_pair(p1_id, p2_id):
     if n_template_pairs == 0: 
         logging.warning(f"No interacting residue pairs found for {pair_key} in template {pdb_id}.")
         return pair_data
-    logging.info(f"Found {n_template_pairs} interacting residue pairs in template {pdb_id} for {pair_key}.")
+    logging.info(f"Found {n_template_pairs} interacting residue pairs in template {pdb_id} for {pair_key}.")"""
     
     """ With template residue pairs identified, we must now map them onto the pertinent query complex.
     """
 
-    # A. Mapping of template residue pairs to query residue pairs
+    """# A. Mapping of template residue pairs to query residue pairs
     mapped_query_pairs = []
     for template_res_a, template_res_b in template_interacting_pairs:
         query_pos_a = map1.get(template_res_a)
@@ -805,9 +1054,15 @@ def process_single_pair(p1_id, p2_id):
     #   The initial count of template residue pairs is n_template_pairs, held constant.
     pair_data['SIZE'] = conserved_amount
     pair_data['COV'] = conserved_amount / n_template_pairs if n_template_pairs > 0 else 0.0
-    logging.info(f"Final metrics for {pair_key}: SIZE = {pair_data['SIZE']}, COV = {pair_data['COV']:.2f}")
+    logging.info(f"Final metrics for {pair_key}: SIZE = {pair_data['SIZE']}, COV = {pair_data['COV']:.2f}")""" 
 
-    return pair_data
+    # --- STAGE 3: SAVE TOP TEMPLATES FOR EACH CONDITION TO JSONL ---
+    for cond in CONDITIONS:
+        output_jsonl_path = os.path.join(CANDIDATE_TEMPLATES_PATH, f"best_templates_{cond}_train_{pair_key}.jsonl")
+        os.makedirs(os.path.dirname(output_jsonl_path), exist_ok = True)
+        save_as_jsonl(final_templates[cond], output_jsonl_path)
+        logging.info(f"Saved {len(final_templates[cond])} templates for {pair_key} under condition '{cond}' to {output_jsonl_path}.")
+    return pair_data_records
 
 def main():
     """Main function to drive the pipeline"""
@@ -846,8 +1101,10 @@ def main():
     for index, (p1, p2) in enumerate(my_slice_of_pairs):
         logging.info(f"Processing pair {index + 1}: {p1}_{p2}")
         pair_data = process_single_pair(p1, p2)
-        with open(os.path.join(args.json_output_path, f"{p1}_{p2}.json"), "w") as f:
-            json.dump(pair_data, f, indent = 4)
+        for cond in CONDITIONS:
+            output_jsonl_path = os.path.join(args.json_output_path, f"{p1}_{p2}_{cond}.jsonl")
+            save_as_jsonl(pair_data[cond], output_jsonl_path)
+            logging.info(f"Saved condition '{cond}' data for {p1}_{p2} to {output_jsonl_path}: {len(pair_data[cond])} records.")
         print("-"*60)
         # logging.info(f"Processed pair {pair_idx + 1}/{len(my_slice_of_pairs)}: {p1} - {p2}")
     logging.info(f"Task {args.task_id} completed. Processed {len(my_slice_of_pairs)} pairs.")
