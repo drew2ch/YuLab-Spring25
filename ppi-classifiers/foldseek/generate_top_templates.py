@@ -320,15 +320,16 @@ def get_mapped_binding_sites(
     t_chain = t_protein_model[chain]
     os.makedirs(BASE_SCRATCH_PATH, exist_ok = True)
     scratch_dir = tempfile.mkdtemp(dir = BASE_SCRATCH_PATH)
-    logging.debug(f"Created temporary directory: {scratch_dir}")
+    logging.info(f"Created temporary directory: {scratch_dir}")
 
     try:
-        """Perform 3-way sequence aligment.
+        """ Perform 3-way sequence aligment.
             - A   = the original query protein sequence
             - A'  = the Foldseek-derived template sequence
             - A'' = the PDB structure's sequence
             First, map PDB sequence to Foldseek sequence
-            Second, map the Foldseek sequence to the query sequence"""
+            Second, map the Foldseek sequence to the query sequence
+        """
         
         # --- 1. Extract sequence (A'') and residue IDs from PDB structure ---
         t_residue_id_pos_mapping = {f"{res.id[1]}{res.id[2].strip()}": i + 1 for i, res in enumerate(t_chain.get_residues())}
@@ -339,7 +340,7 @@ def get_mapped_binding_sites(
         if len(t_pdb_seq) < 10:
             logging.warning(f"Extracted sequence for PDB {pdb}_{chain} is too short ({len(t_pdb_seq)} residues).")
             return {}
-        logging.debug(f"DEBUG: For PDB {pdb}_{chain}, t_residue_id_pos_mapping (first 10): {list(t_residue_id_pos_mapping.items())[:10]}")
+        logging.info(f"DEBUG: For PDB {pdb}_{chain}, t_residue_id_pos_mapping (first 10): {list(t_residue_id_pos_mapping.items())[:10]}")
         logging.info(f"Extracted sequence for chain {chain}: {t_pdb_seq}")
 
         # Get foldseek sequence (A') from alignment
@@ -362,7 +363,7 @@ def get_mapped_binding_sites(
             out = blast_result_file,
             outfmt = 5
         )
-        logging.debug(f"Executing BLAST Command: {blastp_cline}")
+        logging.info(f"Executing BLAST Command: {blastp_cline}")
         # os.system(f"blastp -query {t_foldseek_seq_file} -subject {t_pdb_seq_file} -out {blast_result_file} -outfmt 5")
 
         try:
@@ -385,9 +386,9 @@ def get_mapped_binding_sites(
             return {}
         
         hsp = blast_record.alignments[0].hsps[0] # take top HSP
-        logging.debug(f"BLAST HSP found. Identity: {hsp.identities/len(hsp.query) * 100:.2f}%, E-value = {hsp.expect}")
-        logging.debug(f"BLAST alignment query start: {hsp.query_start}, subject start: {hsp.sbjct_start}")
-        logging.debug(f"Coordinate ranges - PDB: 1-{len(t_pdb_seq)}, "
+        logging.info(f"BLAST HSP found. Identity: {hsp.identities/len(hsp.query) * 100:.2f}%, E-value = {hsp.expect}")
+        logging.info(f"BLAST alignment query start: {hsp.query_start}, subject start: {hsp.sbjct_start}")
+        logging.info(f"Coordinate ranges - PDB: 1-{len(t_pdb_seq)}, "
                      f"Foldseek: {alignment['tstart']}-{alignment['tend']}, "
                      f"Query: {alignment['qstart']}-{alignment['qend']}")
 
@@ -402,7 +403,7 @@ def get_mapped_binding_sites(
                 pdb_to_foldseek_map[s_pos] = q_pos
             if hsp.sbjct[i] != "-": s_pos += 1
             if hsp.query[i] != "-": q_pos += 1
-        logging.debug(f"PDB to Foldseek map size = {len(pdb_to_foldseek_map)}")
+        logging.info(f"PDB to Foldseek map size = {len(pdb_to_foldseek_map)}")
         
         # -- Map 3b. Map Foldseek sequence positions (A') to Query sequence positions (A) --
         foldseek_to_query_map = {}
@@ -412,7 +413,7 @@ def get_mapped_binding_sites(
                 foldseek_to_query_map[t_pos] = q_pos
             if alignment["taln"][i] != "-": t_pos += 1
             if alignment["qaln"][i] != "-": q_pos += 1
-        logging.debug(f"Foldseek to Query map size = {len(foldseek_to_query_map)}")
+        logging.info(f"Foldseek to Query map size = {len(foldseek_to_query_map)}")
 
         # -- Map 3c. (Bridge) Gapless taln position -> Full PDB residue number; fix coordinate system mismatch --
         gapless_to_full_target_map = {}
@@ -422,7 +423,7 @@ def get_mapped_binding_sites(
             if residue != '-':
                 gapless_to_full_target_map[gapless_pos] = full_target_pos
                 gapless_pos += 1
-                full_target_pos += 1
+            full_target_pos += 1
 
         logging.info(f"BLAST command: blastp -query {t_foldseek_seq_file} -subject {t_pdb_seq_file} -outfmt 5")
         logging.info(f"Alignment: query = {hsp.query}, sbjct = {hsp.sbjct}")
@@ -464,7 +465,7 @@ def get_mapped_binding_sites(
         # need to clean up temporary directory for subsequent use
         if os.path.exists(scratch_dir):
             shutil.rmtree(scratch_dir)
-            logging.debug(f"Cleaned up temporary directory: {scratch_dir}")
+            logging.info(f"Cleaned up temporary directory: {scratch_dir}")
 
 def parse_foldseek_tsv(tsv_file):
     if not os.path.exists(tsv_file) or os.path.getsize(tsv_file) == 0:
@@ -655,6 +656,7 @@ def process_single_pair(p1_id, p2_id):
         # re-sort filtered template pairs by score
         # filtered_templates.sort(key = lambda x: x["score"], reverse = True)
         # top 20 templates set (09/20/2025)
+        filtered_templates.sort(key = lambda x: x["score"], reverse = True)
         top_n_templates = filtered_templates[:20]
 
         for template_ in top_n_templates:
@@ -810,7 +812,7 @@ def process_single_pair(p1_id, p2_id):
             
             # D. Load and process the top query structure.
             # Note: This assumes that the AF3 model are stored in a specific directory structure.
-            # cif_files.sort()
+            cif_files.sort()
             top_model_file = cif_files[0]
             # --- FIX: Use os.path to split the path string ---
             parent_dir = os.path.dirname(top_model_file)
@@ -844,17 +846,17 @@ def process_single_pair(p1_id, p2_id):
                     if i1 < len(residues_list_A) and i2 < len(residues_list_B):
                         res1, res2 = residues_list_A[i1], residues_list_B[i2]
                         if 'CA' in res1 and 'CA' in res2:
-                            distance = np.linalg.norm(res1['CA'].coord - res2['CA'].coord)
+                            distance = np.linalg.norm(res1['CA'].coord - res2['CA'].coord) 
                             inter_ca_distances.append(distance)
                         else: invalid_pairs += 1
                     else: invalid_pairs += 1
                 
                 if invalid_pairs > 0:
-                    logging.debug(f"Invalid residue pairs found in model: {invalid_pairs} pairs skipped.")
+                    logging.info(f"Invalid residue pairs found in model: {invalid_pairs} pairs skipped.")
                 
                 # Tally # of pairs conserved
                 conserved_amount = sum(1 for d in inter_ca_distances if d <= CA_DISTANCE_THRESHOLD)
-                logging.debug(f"Model has {conserved_amount}/{len(inter_ca_distances)} conserved pairs.")
+                logging.info(f"Model has {conserved_amount}/{len(inter_ca_distances)} conserved pairs.")
             
             except Exception as e:
                 logging.error(f"Error processing model for {pair_key}: {e}")
